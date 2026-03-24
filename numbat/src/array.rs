@@ -6,6 +6,10 @@ use crate::{
     interpreter::RuntimeErrorKind, pretty_print::FormatOptions, quantity::Quantity, value::Value,
 };
 
+fn quantity_result<T>(result: crate::quantity::Result<T>) -> Result<T, Box<RuntimeErrorKind>> {
+    result.map_err(|err| Box::new(RuntimeErrorKind::QuantityError(err)))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ArrayValue {
     elements: ArcArrayD<Value>,
@@ -112,6 +116,60 @@ impl ArrayValue {
         }
     }
 
+    fn quantity_vector(&self) -> Result<Vec<Quantity>, Box<RuntimeErrorKind>> {
+        match self.elements.ndim() {
+            1 => Ok(self
+                .elements
+                .iter()
+                .cloned()
+                .map(Value::unsafe_as_quantity)
+                .collect()),
+            2 => Err(Box::new(RuntimeErrorKind::ExpectedVector)),
+            _ => unreachable!("arrays are limited to rank 1 or 2"),
+        }
+    }
+
+    fn quantity_matrix(&self) -> Result<Vec<Vec<Quantity>>, Box<RuntimeErrorKind>> {
+        match self.elements.shape() {
+            [rows, cols] => Ok((0..*rows)
+                .map(|row| {
+                    (0..*cols)
+                        .map(|col| {
+                            self.elements[IxDyn(&[row, col])]
+                                .clone()
+                                .unsafe_as_quantity()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect()),
+            _ => Err(Box::new(RuntimeErrorKind::ExpectedVector)),
+        }
+    }
+
+    fn parse_index_values(indices: &ArrayValue) -> Result<Vec<usize>, Box<RuntimeErrorKind>> {
+        if indices.elements.ndim() != 1 {
+            return Err(Box::new(RuntimeErrorKind::ExpectedVector));
+        }
+
+        indices
+            .elements
+            .iter()
+            .map(|value| {
+                let quantity = value.clone().unsafe_as_quantity();
+                let scalar = quantity
+                    .as_scalar()
+                    .map_err(|_| Box::new(RuntimeErrorKind::InvalidArrayShape))?
+                    .to_f64();
+
+                if !scalar.is_finite() || scalar < 1.0 || scalar.fract() != 0.0 {
+                    return Err(Box::new(RuntimeErrorKind::InvalidArrayShape));
+                }
+
+                Ok(scalar as usize - 1)
+            })
+            .collect()
+    }
+
     pub fn head(self) -> Result<Value, Box<RuntimeErrorKind>> {
         match self.elements.ndim() {
             1 => self
@@ -121,6 +179,30 @@ impl ArrayValue {
                 .ok_or_else(|| Box::new(RuntimeErrorKind::EmptyArray)),
             2 => Err(Box::new(RuntimeErrorKind::ExpectedVector)),
             _ => unreachable!("arrays are limited to rank 1 or 2"),
+        }
+    }
+
+    pub fn index(&self, indices: ArrayValue) -> Result<Value, Box<RuntimeErrorKind>> {
+        let indices = Self::parse_index_values(&indices)?;
+
+        match (self.elements.shape(), indices.as_slice()) {
+            ([_len], [idx]) => self.elements.get(IxDyn(&[*idx])).cloned().ok_or_else(|| {
+                Box::new(RuntimeErrorKind::UserError(
+                    "Array index out of bounds".into(),
+                ))
+            }),
+            ([_rows, _cols], [row, col]) => self
+                .elements
+                .get(IxDyn(&[*row, *col]))
+                .cloned()
+                .ok_or_else(|| {
+                    Box::new(RuntimeErrorKind::UserError(
+                        "Array index out of bounds".into(),
+                    ))
+                }),
+            _ => Err(Box::new(RuntimeErrorKind::UserError(
+                "Array indexing expects one index for vectors or two indices for matrices".into(),
+            ))),
         }
     }
 
@@ -309,6 +391,50 @@ impl ArrayValue {
         }
     }
 
+    pub fn dot(self, other: ArrayValue) -> Result<Quantity, Box<RuntimeErrorKind>> {
+        let lhs = self.quantity_vector()?;
+        let rhs = other.quantity_vector()?;
+
+        if lhs.len() != rhs.len() {
+            return Err(Box::new(RuntimeErrorKind::IncompatibleArrayShape));
+        }
+
+        let mut acc = Quantity::from_scalar(0.0);
+        for (lhs, rhs) in lhs.into_iter().zip(rhs.into_iter()) {
+            let term = lhs * rhs;
+            acc = quantity_result(&acc + &term)?;
+        }
+
+        Ok(acc)
+    }
+
+    pub fn cross(self, other: ArrayValue) -> Result<ArrayValue, Box<RuntimeErrorKind>> {
+        let lhs = self.quantity_vector()?;
+        let rhs = other.quantity_vector()?;
+
+        if lhs.len() != 3 || rhs.len() != 3 {
+            return Err(Box::new(RuntimeErrorKind::UserError(
+                "cross expects two 3-element vectors".into(),
+            )));
+        }
+
+        let result = vec![
+            quantity_result(
+                &(lhs[1].clone() * rhs[2].clone()) - &(lhs[2].clone() * rhs[1].clone()),
+            )?,
+            quantity_result(
+                &(lhs[2].clone() * rhs[0].clone()) - &(lhs[0].clone() * rhs[2].clone()),
+            )?,
+            quantity_result(
+                &(lhs[0].clone() * rhs[1].clone()) - &(lhs[1].clone() * rhs[0].clone()),
+            )?,
+        ];
+
+        Ok(ArrayValue::from_values(
+            result.into_iter().map(Value::Quantity).collect(),
+        ))
+    }
+
     pub fn shape(self) -> ArrayValue {
         let shape = self.shape_vec();
         ArrayValue::from_values(
@@ -360,6 +486,171 @@ impl ArrayValue {
     pub fn reshape(self, shape: ArrayValue) -> Result<ArrayValue, Box<RuntimeErrorKind>> {
         let dims = Self::parse_shape(&shape)?;
         ArrayValue::from_array(Self::reshape_array(self.elements, &dims)?)
+    }
+
+    #[allow(clippy::needless_range_loop)]
+    pub fn matmul(self, other: ArrayValue) -> Result<Value, Box<RuntimeErrorKind>> {
+        match (self.elements.shape(), other.elements.shape()) {
+            ([lhs_len], [rhs_len]) => {
+                let lhs = self.quantity_vector()?;
+                let rhs = other.quantity_vector()?;
+                if lhs_len != rhs_len {
+                    return Err(Box::new(RuntimeErrorKind::IncompatibleArrayShape));
+                }
+                let mut acc = Quantity::from_scalar(0.0);
+                for (lhs, rhs) in lhs.into_iter().zip(rhs.into_iter()) {
+                    let term = lhs * rhs;
+                    acc = quantity_result(&acc + &term)?;
+                }
+                Ok(Value::Array(ArrayValue::from_values(vec![
+                    Value::Quantity(acc),
+                ])))
+            }
+            ([lhs_rows, lhs_cols], [rhs_rows, rhs_cols]) if lhs_cols == rhs_rows => {
+                let lhs = self.quantity_matrix()?;
+                let rhs = other.quantity_matrix()?;
+                let mut rows = Vec::with_capacity(*lhs_rows);
+
+                for row in 0..*lhs_rows {
+                    let mut out_row = Vec::with_capacity(*rhs_cols);
+                    for col in 0..*rhs_cols {
+                        let mut acc = Quantity::from_scalar(0.0);
+                        for k in 0..*lhs_cols {
+                            let term = lhs[row][k].clone() * rhs[k][col].clone();
+                            acc = quantity_result(&acc + &term)?;
+                        }
+                        out_row.push(Value::Quantity(acc));
+                    }
+                    rows.push(out_row);
+                }
+
+                Ok(Value::Array(ArrayValue::from_rows(rows)?))
+            }
+            ([lhs_rows, lhs_cols], [rhs_len]) if lhs_cols == rhs_len => {
+                let lhs = self.quantity_matrix()?;
+                let rhs = other.quantity_vector()?;
+                let mut out = Vec::with_capacity(*lhs_rows);
+
+                for row in 0..*lhs_rows {
+                    let mut acc = Quantity::from_scalar(0.0);
+                    for k in 0..*lhs_cols {
+                        let term = lhs[row][k].clone() * rhs[k].clone();
+                        acc = quantity_result(&acc + &term)?;
+                    }
+                    out.push(Value::Quantity(acc));
+                }
+
+                Ok(Value::Array(ArrayValue::from_values(out)))
+            }
+            ([lhs_len], [rhs_rows, rhs_cols]) if lhs_len == rhs_rows => {
+                let lhs = self.quantity_vector()?;
+                let rhs = other.quantity_matrix()?;
+                let mut out = Vec::with_capacity(*rhs_cols);
+
+                for col in 0..*rhs_cols {
+                    let mut acc = Quantity::from_scalar(0.0);
+                    for k in 0..*rhs_rows {
+                        let term = lhs[k].clone() * rhs[k][col].clone();
+                        acc = quantity_result(&acc + &term)?;
+                    }
+                    out.push(Value::Quantity(acc));
+                }
+
+                Ok(Value::Array(ArrayValue::from_values(out)))
+            }
+            _ => Err(Box::new(RuntimeErrorKind::IncompatibleArrayShape)),
+        }
+    }
+
+    #[allow(clippy::needless_range_loop)]
+    pub fn solve(self, rhs: ArrayValue) -> Result<Value, Box<RuntimeErrorKind>> {
+        let lhs_dims = self.shape_vec();
+        let rhs_dims = rhs.shape_vec();
+
+        let n = match lhs_dims.as_slice() {
+            [n, n2] if n == n2 => *n,
+            _ => {
+                return Err(Box::new(RuntimeErrorKind::IncompatibleArrayShape));
+            }
+        };
+
+        let (mut a, rhs_is_vector, mut b) = match rhs_dims.as_slice() {
+            [rows] if *rows == n => {
+                let matrix = rhs
+                    .quantity_vector()?
+                    .into_iter()
+                    .map(|q| vec![q])
+                    .collect();
+                (self.quantity_matrix()?, true, matrix)
+            }
+            [rows, cols] if *rows == n => (self.quantity_matrix()?, false, rhs.quantity_matrix()?),
+            _ => return Err(Box::new(RuntimeErrorKind::IncompatibleArrayShape)),
+        };
+
+        let n = a.len();
+        let rhs_cols = b.first().map_or(0, |row| row.len());
+
+        for pivot_idx in 0..n {
+            let pivot_row = (pivot_idx..n)
+                .find(|&row| !a[row][pivot_idx].is_zero())
+                .ok_or_else(|| {
+                    Box::new(RuntimeErrorKind::UserError("Matrix is singular".into()))
+                })?;
+
+            if pivot_row != pivot_idx {
+                a.swap(pivot_row, pivot_idx);
+                b.swap(pivot_row, pivot_idx);
+            }
+
+            let pivot = a[pivot_idx][pivot_idx].clone();
+            if pivot.is_zero() {
+                return Err(Box::new(RuntimeErrorKind::UserError(
+                    "Matrix is singular".into(),
+                )));
+            }
+
+            for col in pivot_idx..n {
+                a[pivot_idx][col] = a[pivot_idx][col].clone() / pivot.clone();
+            }
+            for col in 0..rhs_cols {
+                b[pivot_idx][col] = b[pivot_idx][col].clone() / pivot.clone();
+            }
+
+            for row in 0..n {
+                if row == pivot_idx {
+                    continue;
+                }
+
+                let factor = a[row][pivot_idx].clone();
+                if factor.is_zero() {
+                    continue;
+                }
+
+                for col in pivot_idx..n {
+                    let term = a[pivot_idx][col].clone() * factor.clone();
+                    a[row][col] = quantity_result(&a[row][col] - &term)?;
+                }
+                for col in 0..rhs_cols {
+                    let term = b[pivot_idx][col].clone() * factor.clone();
+                    b[row][col] = quantity_result(&b[row][col] - &term)?;
+                }
+            }
+        }
+
+        if rhs_is_vector {
+            Ok(Value::Array(ArrayValue::from_values(
+                b.into_iter()
+                    .map(|row| row.into_iter().next().unwrap())
+                    .map(Value::Quantity)
+                    .collect(),
+            )))
+        } else {
+            Ok(Value::Array(ArrayValue::from_rows(
+                b.into_iter()
+                    .map(|row| row.into_iter().map(Value::Quantity).collect())
+                    .collect(),
+            )?))
+        }
     }
 
     pub fn filled(shape: ArrayValue, value: Value) -> Result<ArrayValue, Box<RuntimeErrorKind>> {

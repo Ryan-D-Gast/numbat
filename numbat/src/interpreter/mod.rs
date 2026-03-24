@@ -246,6 +246,7 @@ mod tests {
         fn shape<A>(x: Array<A>) -> Array<Scalar>
         fn reshape<A>(x: Array<A>, new_shape: Array<Scalar>) -> Array<A>
         fn element_at<A>(i: Scalar, x: Array<A>) -> A
+        fn index<A>(xs: Array<A>, indices: Array<Scalar>) -> A
         fn range(start: Scalar, end: Scalar) -> Array<Scalar>
         fn fill<A>(value: A, shape: Array<Scalar>) -> Array<A>
         fn contains<T>(x: T, xs: Array<T>) -> Bool
@@ -255,6 +256,10 @@ mod tests {
         fn foldl<T, U>(f: Fn[(T, U) -> T], acc: T, xs: Array<U>) -> T
         fn sort_by_key<T, D: Dim>(key: Fn[(T) -> D], xs: Array<T>) -> Array<T>
         fn transpose<D>(x: Array<D>) -> Array<D>
+        fn matmul<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<D * E>
+        fn mat_dot<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> D * E
+        fn mat_cross<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<D * E>
+        fn linear_solve<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<E / D>
         fn zeros(shape: Array<Scalar>) -> Array<Scalar>
         fn ones(shape: Array<Scalar>) -> Array<Scalar>
         fn eye(shape: Array<Scalar>) -> Array<Scalar>
@@ -420,7 +425,14 @@ mod tests {
             ))
         );
 
+        assert_evaluates_to_scalar("index([3, 2, 1], [2])", 2.0);
+
         assert_evaluates_to_scalar("element_at(2, [3, 2, 1, 0])", 1.0);
+
+        assert_eq!(
+            get_interpreter_result("([1, 2; 3, 4])[1, 2]").unwrap(),
+            InterpreterResult::Value(Value::Quantity(Quantity::from_scalar(2.0)))
+        );
 
         assert_eq!(
             get_interpreter_result("vcat([1, 2; 3, 4], [5, 6])").unwrap(),
@@ -482,6 +494,39 @@ mod tests {
                         Value::Quantity(Quantity::from_scalar(4.0)),
                         Value::Quantity(Quantity::from_scalar(6.0)),
                     ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_evaluates_to_scalar("mat_dot([1, 2, 3], [4, 5, 6])", 32.0);
+
+        assert_eq!(
+            get_interpreter_result("mat_cross([1, 0, 0], [0, 1, 0])").unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::Quantity(Quantity::from_scalar(0.0)),
+                Value::Quantity(Quantity::from_scalar(0.0)),
+                Value::Quantity(Quantity::from_scalar(1.0)),
+            ])))
+        );
+
+        assert_eq!(
+            get_interpreter_result("matmul([1, 2; 3, 4], [5; 6])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![Value::Quantity(Quantity::from_scalar(17.0))],
+                    vec![Value::Quantity(Quantity::from_scalar(39.0))],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("([2, 1; 5, 3]) \\ ([1; 2])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![Value::Quantity(Quantity::from_scalar(1.0))],
+                    vec![Value::Quantity(Quantity::from_scalar(-1.0))],
                 ])
                 .unwrap()
             ))

@@ -292,6 +292,16 @@ def generate_all_function_lists(inspect_binary):
 
     list_of_functions(
         inspect_binary,
+        "linalg",
+        {
+            "title": "Linear algebra functions",
+            "icon": "lucide/square-function",
+            "sections": [{"modules": ["core::linalg"]}],
+        },
+    )
+
+    list_of_functions(
+        inspect_binary,
         "strings",
         {
             "title": "String-related functions",

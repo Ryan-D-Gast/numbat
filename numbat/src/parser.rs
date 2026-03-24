@@ -1286,16 +1286,39 @@ impl<'a> Parser<'a> {
     }
 
     fn factor(&mut self, tokens: &[Token<'a>]) -> Result<Expression<'a>> {
-        self.parse_binop(
+        let mut expr = self.per_factor(tokens)?;
+
+        while let Some(matched) = self.match_any(
             tokens,
-            &[TokenKind::Multiply, TokenKind::Divide],
-            |matched| match matched {
-                TokenKind::Multiply => BinaryOperator::Mul,
-                TokenKind::Divide => BinaryOperator::Div,
+            &[TokenKind::Multiply, TokenKind::Divide, TokenKind::Backslash],
+        ) {
+            let span_op = self.last(tokens).unwrap().span;
+            let rhs = self.per_factor(tokens)?;
+
+            expr = match matched.kind {
+                TokenKind::Multiply => Expression::BinaryOperator {
+                    op: BinaryOperator::Mul,
+                    lhs: Box::new(expr),
+                    rhs: Box::new(rhs),
+                    span_op: Some(span_op),
+                },
+                TokenKind::Divide => Expression::BinaryOperator {
+                    op: BinaryOperator::Div,
+                    lhs: Box::new(expr),
+                    rhs: Box::new(rhs),
+                    span_op: Some(span_op),
+                },
+                TokenKind::Backslash => Expression::FunctionCall {
+                    ident_span: span_op,
+                    full_span: expr.full_span().extend(&rhs.full_span()).extend(&span_op),
+                    callable: Box::new(Expression::Identifier(span_op, "linear_solve")),
+                    args: vec![expr, rhs],
+                },
                 _ => unreachable!(),
-            },
-            |parser| parser.per_factor(tokens),
-        )
+            };
+        }
+
+        Ok(expr)
     }
 
     fn per_factor(&mut self, tokens: &[Token<'a>]) -> Result<Expression<'a>> {
@@ -1473,6 +1496,37 @@ impl<'a> Parser<'a> {
                     expr: Box::new(expr),
                     field_name: ident,
                 }
+            } else if self.match_exact(tokens, TokenKind::LeftBracket).is_some() {
+                let bracket_span = self.last(tokens).unwrap().span;
+                self.skip_empty_lines(tokens);
+
+                let indices = if self.match_exact(tokens, TokenKind::RightBracket).is_some() {
+                    return Err(ParseError::new(
+                        ParseErrorKind::ExpectedCommaOrRightBracketInArray,
+                        bracket_span,
+                    ));
+                } else {
+                    let indices = self.expression_row(tokens)?;
+
+                    self.skip_empty_lines(tokens);
+                    if self.match_exact(tokens, TokenKind::RightBracket).is_none() {
+                        return Err(ParseError::new(
+                            ParseErrorKind::MissingClosingParen,
+                            self.peek(tokens).span,
+                        ));
+                    }
+                    indices
+                };
+
+                let end_span = self.last(tokens).unwrap().span;
+                let indices_expr = Expression::Array(bracket_span.extend(&end_span), indices);
+                let full_span = expr.full_span().extend(&end_span);
+                expr = Expression::FunctionCall {
+                    ident_span: bracket_span,
+                    full_span,
+                    callable: Box::new(Expression::Identifier(bracket_span, "index")),
+                    args: vec![expr, indices_expr],
+                };
             } else {
                 return Ok(expr);
             }

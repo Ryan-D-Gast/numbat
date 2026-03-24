@@ -92,6 +92,7 @@ pub(crate) fn functions() -> &'static HashMap<&'static str, ForeignFunction> {
         insert_function!(take, 2..=2);
         insert_function!(drop, 2..=2);
         insert_function!(element_at, 2..=2);
+        insert_function!(index, 2..=2);
         insert_function!(range, 2..=2);
         insert_function!(fill, 2..=2);
         insert_function!(zeros, 1..=1);
@@ -112,6 +113,10 @@ pub(crate) fn functions() -> &'static HashMap<&'static str, ForeignFunction> {
         insert_function!(reshape, 2..=2);
         insert_function!(transpose, 1..=1);
         insert_function!(hcat, 2..=2);
+        insert_function!(matmul, 2..=2);
+        insert_function!(mat_dot, 2..=2);
+        insert_function!(mat_cross, 2..=2);
+        insert_function!(linear_solve, 2..=2);
 
         // Strings
         insert_function!(str_length, 1..=1);

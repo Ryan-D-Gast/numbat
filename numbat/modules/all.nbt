@@ -9,7 +9,6 @@ use extra::color
 use extra::astronomy
 use extra::celestial
 use extra::cooking
-use extra::vector3
 
 use numerics::diff
 use numerics::solve

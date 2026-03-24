@@ -12,6 +12,22 @@ type SquareMatrix<D: Dim, N: Shape> = Array<D>
 @example("transpose([1, 2; 3, 4])")
 fn transpose<D>(xs: Array<D>) -> Array<D>
 
+@description("Multiply arrays and matrices")
+@example("matmul([1, 2; 3, 4], [5; 6])")
+fn matmul<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<D * E>
+
+@description("Compute the dot product of two vectors")
+@example("mat_dot([1, 2, 3], [4, 5, 6])")
+fn mat_dot<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> D * E
+
+@description("Compute the cross product of two 3-vectors")
+@example("mat_cross([1, 0, 0], [0, 1, 0])")
+fn mat_cross<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<D * E>
+
+@description("Solve a linear system using backslash notation")
+@example("[2, 1; 5, 3] \\ [1; 2]")
+fn linear_solve<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<E / D>
+
 @description("Create an array of zeros with the given shape")
 @example("zeros([2, 3])")
 fn zeros(shape: Array<Scalar>) -> Array<Scalar>

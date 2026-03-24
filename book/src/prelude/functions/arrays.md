@@ -6,6 +6,12 @@ icon: lucide/brackets
 
 Defined in: `core::arrays`
 
+### `id`
+
+```nbt
+fn id<T>(x: T) -> T
+```
+
 ### `len`
 Get the length of a 1-D array.
 
@@ -119,6 +125,21 @@ fn vcat<A>(xs1: Array<A>, xs2: Array<A>) -> Array<A>
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=vcat%28%5B3%2C%202%2C%201%5D%2C%20%5B10%2C%2011%5D%29){ .md-button }
 
+### `hcat`
+Concatenate two arrays along the second axis.
+
+```nbt
+fn hcat<A>(xs1: Array<A>, xs2: Array<A>) -> Array<A>
+```
+
+!!! example "Example"
+    ```nbt
+    hcat([1, 2; 3, 4], [5; 6])
+
+        = [1, 2, 5; 3, 4, 6]    [Array<Scalar>]
+    ```
+    [:material-play-circle: Run this example](https://numbat.dev/?q=hcat%28%5B1%2C%202%3B%203%2C%204%5D%2C%20%5B5%3B%206%5D%29){ .md-button }
+
 ### `shape`
 Return the shape of an array.
 
@@ -194,6 +215,21 @@ fn element_at<A>(i: Scalar, xs: Array<A>) -> A
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=element%5Fat%282%2C%20%5B3%2C%202%2C%201%2C%200%5D%29){ .md-button }
 
+### `index`
+Index into an array using 1-based coordinates.
+
+```nbt
+fn index<A>(xs: Array<A>, indices: Array<Scalar>) -> A
+```
+
+!!! example "Example"
+    ```nbt
+    ([1, 2; 3, 4])[1, 2]
+
+        = 2
+    ```
+    [:material-play-circle: Run this example](https://numbat.dev/?q=%28%5B1%2C%202%3B%203%2C%204%5D%29%5B1%2C%202%5D){ .md-button }
+
 ### `range`
 Generate a range of integer numbers from `start` to `end` (inclusive).
 
@@ -208,6 +244,21 @@ fn range(start: Scalar, end: Scalar) -> Array<Scalar>
         = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=range%282%2C%2012%29){ .md-button }
+
+### `fill`
+Create an array filled with a given value and shape.
+
+```nbt
+fn fill<A>(value: A, shape: Array<Scalar>) -> Array<A>
+```
+
+!!! example "Example"
+    ```nbt
+    fill(0, [2, 3])
+
+        = [0, 0, 0; 0, 0, 0]    [forall A: Dim. Array<A>]
+    ```
+    [:material-play-circle: Run this example](https://numbat.dev/?q=fill%280%2C%20%5B2%2C%203%5D%29){ .md-button }
 
 ### `reverse`
 Reverse the order of a 1-D array.
@@ -291,14 +342,20 @@ Sort a 1-D array of elements, using the given key function that maps the element
 fn sort_by_key<A, D: Dim>(key: Fn[(A) -> D], xs: Array<A>) -> Array<A>
 ```
 
-!!! example "Sort by last digit."
+!!! example "Sort descending by key."
     ```nbt
-    fn last_digit(x) = mod(x, 10)
-    sort_by_key(last_digit, [701, 313, 9999, 4])
+    fn negate(x) = -x
+    sort_by_key(negate, [701, 313, 9999, 4])
 
-        = [701, 313, 4, 9999]    [Array<Scalar>]
+        = [9999, 701, 313, 4]    [Array<Scalar>]
     ```
-    [:material-play-circle: Run this example](https://numbat.dev/?q=fn%20last%5Fdigit%28x%29%20%3D%20mod%28x%2C%2010%29%0Asort%5Fby%5Fkey%28last%5Fdigit%2C%20%5B701%2C%20313%2C%209999%2C%204%5D%29){ .md-button }
+    [:material-play-circle: Run this example](https://numbat.dev/?q=fn%20negate%28x%29%20%3D%20%2Dx%0Asort%5Fby%5Fkey%28negate%2C%20%5B701%2C%20313%2C%209999%2C%204%5D%29){ .md-button }
+
+### `id`
+
+```nbt
+fn id<T>(x: T) -> T
+```
 
 ### `sort`
 Sort a 1-D array of quantities in ascending order.
@@ -412,19 +469,4 @@ fn join(xs: Array<String>, sep: String) -> String
         = "snake_case"    [String]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=join%28%5B%22snake%22%2C%20%22case%22%5D%2C%20%22%5F%22%29){ .md-button }
-
-### `split`
-Split a string into an array of strings using a separator.
-
-```nbt
-fn split(input: String, separator: String) -> Array<String>
-```
-
-!!! example "Example"
-    ```nbt
-    split("Numbat is a statically typed programming language.", " ")
-
-        = ["Numbat", "is", "a", "statically", "typed", "programming", "language."]    [Array<String>]
-    ```
-    [:material-play-circle: Run this example](https://numbat.dev/?q=split%28%22Numbat%20is%20a%20statically%20typed%20programming%20language%2E%22%2C%20%22%20%22%29){ .md-button }
 

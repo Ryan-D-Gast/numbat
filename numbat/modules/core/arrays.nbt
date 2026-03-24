@@ -54,6 +54,10 @@ fn drop<A>(n: Scalar, xs: Array<A>) -> Array<A>
 @example("element_at(2, [3, 2, 1, 0])")
 fn element_at<A>(i: Scalar, xs: Array<A>) -> A
 
+@description("Index into an array using 1-based coordinates")
+@example("([1, 2; 3, 4])[1, 2]")
+fn index<A>(xs: Array<A>, indices: Array<Scalar>) -> A
+
 @description("Generate a range of integer numbers from `start` to `end` (inclusive)")
 @example("range(2, 12)")
 fn range(start: Scalar, end: Scalar) -> Array<Scalar>

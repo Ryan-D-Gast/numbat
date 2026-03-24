@@ -237,6 +237,17 @@ pub fn element_at(
     array.element_at(index as usize)
 }
 
+pub fn index(
+    _ctx: &mut FfiContext,
+    mut args: Args,
+    _return_type: &TypeScheme,
+) -> Result<Value, Box<RuntimeErrorKind>> {
+    let array = arg!(args).unsafe_as_array();
+    let indices = arg!(args).unsafe_as_array();
+
+    array.index(indices)
+}
+
 pub fn contains(
     _ctx: &mut FfiContext,
     mut args: Args,
@@ -493,4 +504,44 @@ pub fn transpose(
     _return_type: &TypeScheme,
 ) -> Result<Value, Box<RuntimeErrorKind>> {
     Ok(arg!(args).unsafe_as_array().transpose().into_value())
+}
+
+pub fn matmul(
+    _ctx: &mut FfiContext,
+    mut args: Args,
+    _return_type: &TypeScheme,
+) -> Result<Value, Box<RuntimeErrorKind>> {
+    let lhs = arg!(args).unsafe_as_array();
+    let rhs = arg!(args).unsafe_as_array();
+    lhs.matmul(rhs)
+}
+
+pub fn mat_dot(
+    _ctx: &mut FfiContext,
+    mut args: Args,
+    _return_type: &TypeScheme,
+) -> Result<Value, Box<RuntimeErrorKind>> {
+    let lhs = arg!(args).unsafe_as_array();
+    let rhs = arg!(args).unsafe_as_array();
+    Ok(Value::Quantity(lhs.dot(rhs)?))
+}
+
+pub fn mat_cross(
+    _ctx: &mut FfiContext,
+    mut args: Args,
+    _return_type: &TypeScheme,
+) -> Result<Value, Box<RuntimeErrorKind>> {
+    let lhs = arg!(args).unsafe_as_array();
+    let rhs = arg!(args).unsafe_as_array();
+    Ok(lhs.cross(rhs)?.into_value())
+}
+
+pub fn linear_solve(
+    _ctx: &mut FfiContext,
+    mut args: Args,
+    _return_type: &TypeScheme,
+) -> Result<Value, Box<RuntimeErrorKind>> {
+    let lhs = arg!(args).unsafe_as_array();
+    let rhs = arg!(args).unsafe_as_array();
+    lhs.solve(rhs)
 }

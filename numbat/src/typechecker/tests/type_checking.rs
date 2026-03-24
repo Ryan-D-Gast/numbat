@@ -784,6 +784,8 @@ fn arrays() {
 
     assert_successful_typecheck("[true]");
     assert_successful_typecheck("head([true, false])");
+    assert_successful_typecheck("index([1, 2, 3], [2])");
+    assert_successful_typecheck("([1, 2; 3, 4])[1, 2]");
 
     assert!(matches!(
         get_typecheck_error("[1, a]"),
@@ -811,6 +813,10 @@ fn matrices() {
     assert_successful_typecheck("[1 a; 2 a]");
     assert_successful_typecheck("fn f() -> Array<Scalar> = [1; 2]");
     assert_successful_typecheck("transpose([1, 2; 3, 4])");
+    assert_successful_typecheck("matmul([1, 2; 3, 4], [5; 6])");
+    assert_successful_typecheck("mat_dot([1, 2, 3], [4, 5, 6])");
+    assert_successful_typecheck("mat_cross([1, 0, 0], [0, 1, 0])");
+    assert_successful_typecheck("([2, 1; 5, 3]) \\ ([1; 2])");
     assert_successful_typecheck("fill(0, [2, 2])");
     assert_successful_typecheck("zeros([2, 2])");
     assert_successful_typecheck("ones([2, 2])");

@@ -32,6 +32,7 @@ const TEST_PRELUDE: &str = "
 
     fn len<T>(x: Array<T>) -> Scalar
     fn head<T>(x: Array<T>) -> T
+    fn index<T>(xs: Array<T>, indices: Array<Scalar>) -> T
     fn range(start: Scalar, end: Scalar) -> Array<Scalar>
     fn fill<T>(value: T, shape: Array<Scalar>) -> Array<T>
     fn hcat<T>(xs1: Array<T>, xs2: Array<T>) -> Array<T>
@@ -42,6 +43,10 @@ const TEST_PRELUDE: &str = "
     type Matrix<D: Dim, Rows: Shape, Cols: Shape> = Array<D>
     type Vector<D: Dim, N: Shape> = Array<D>
     fn transpose<D>(x: Array<D>) -> Array<D>
+    fn matmul<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<D * E>
+    fn mat_dot<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> D * E
+    fn mat_cross<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<D * E>
+    fn linear_solve<D: Dim, E: Dim>(lhs: Array<D>, rhs: Array<E>) -> Array<E / D>
     fn zeros(shape: Array<Scalar>) -> Array<Scalar>
     fn ones(shape: Array<Scalar>) -> Array<Scalar>
     fn eye(shape: Array<Scalar>) -> Array<Scalar>

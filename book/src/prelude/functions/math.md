@@ -10,21 +10,6 @@ icon: lucide/sigma
 
 Defined in: `core::functions`
 
-### `id` (Identity function)
-Return the input value.
-
-```nbt
-fn id<A>(x: A) -> A
-```
-
-!!! example "Example"
-    ```nbt
-    id(8 kg)
-
-        = 8 kg    [Mass]
-    ```
-    [:material-play-circle: Run this example](https://numbat.dev/?q=id%288%20kg%29){ .md-button }
-
 ### `abs` (Absolute value)
 Return the absolute value \( |x| \) of the input. This works for quantities, too: `abs(-5 m) = 5 m`.
 More information [here](https://doc.rust-lang.org/std/primitive.f64.html#method.abs).

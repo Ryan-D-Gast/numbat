@@ -172,6 +172,21 @@ fn str_contains(needle: String, haystack: String) -> Bool
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=str%5Fcontains%28%22typed%22%2C%20%22Numbat%20is%20a%20statically%20typed%20programming%20language%2E%22%29){ .md-button }
 
+### `split`
+Split a string into an array of strings using a separator.
+
+```nbt
+fn split(input: String, separator: String) -> Array<String>
+```
+
+!!! example "Example"
+    ```nbt
+    split("Numbat is a statically typed programming language.", " ")
+
+        = ["Numbat", "is", "a", "statically", "typed", "programming", "language."]    [Array<String>]
+    ```
+    [:material-play-circle: Run this example](https://numbat.dev/?q=split%28%22Numbat%20is%20a%20statically%20typed%20programming%20language%2E%22%2C%20%22%20%22%29){ .md-button }
+
 ### `str_replace`
 Replace all occurrences of a substring in a string.
 

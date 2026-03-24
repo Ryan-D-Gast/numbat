@@ -16,8 +16,19 @@ Arrays can be created using the `[…]` syntax. For example:
 The type of an array is written as `Array<T>`, where `T` is the type of the elements. The types of the arrays
 above are `Array<Length>`, `Array<String>`, and `Array<Array<Scalar>>`, respectively.
 
-The standard library provides a [number of functions](../prelude/functions/arrays.md) to work with arrays. Some
-useful things to do with arrays are:
+Arrays can be indexed using one-based coordinates:
+
+```nbt
+let xs = [10, 20, 30]
+xs[2]  # 20
+
+let m = [1, 2; 3, 4]
+m[1, 2]  # 2
+```
+
+The standard library provides a [number of functions](../prelude/functions/arrays.md) to work with arrays, and
+the [linear algebra functions](../prelude/functions/linalg.md) build on top of the same array type. Some useful
+things to do with arrays are:
 ```nbt
 # Get the length of an array
 len([1, 2, 3])  # returns 3
@@ -39,4 +50,9 @@ range(1, 5)  # returns [1, 2, 3, 4, 5]
 
 # Generate an array of evenly spaced quantities:
 linspace(0 m, 1 m, 5)  # returns [0 m, 0.25 m, 0.5 m, 0.75 m, 1 m]
+
+# Create matrices and solve systems:
+zeros([2, 3])         # returns [0, 0, 0; 0, 0, 0]
+eye([3, 3])           # returns [1, 0, 0; 0, 1, 0; 0, 0, 1]
+[2, 1; 5, 3] \ [1; 2] # solves a linear system
 ```

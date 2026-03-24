@@ -71,6 +71,7 @@ nav = [
       "prelude/functions/index.md",
       "prelude/functions/math.md",
       "prelude/functions/arrays.md",
+      "prelude/functions/linalg.md",
       "prelude/functions/strings.md",
       "prelude/functions/datetime.md",
       "prelude/functions/other.md",

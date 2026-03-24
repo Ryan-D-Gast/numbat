@@ -146,7 +146,7 @@ let hydrogen = Element {         # Instantiate it
 
 hydrogen.density                 # Access the field of a struct
 
-struct Vec2<D: Dim> {            # A generic struct with type parameter
+struct Point2<D: Dim> {          # A generic struct with type parameter
     x: D,
     y: D,
 }
