@@ -1,7 +1,7 @@
+mod arrays;
 mod currency;
 mod datetime;
 mod functions;
-mod lists;
 mod lookup;
 mod macros;
 mod math;
@@ -16,7 +16,7 @@ use crate::span::Span;
 use crate::typechecker::type_scheme::TypeScheme;
 use crate::unit::Unit;
 use crate::value::Value;
-use crate::vm::{Constant, ExecutionContext};
+use crate::vm::{ExecutionContext, Vm};
 
 type ControlFlow = std::ops::ControlFlow<RuntimeErrorKind>;
 
@@ -35,12 +35,12 @@ pub(crate) type Args = VecDeque<Arg>;
 /// Context passed to FFI functions, providing access to runtime state.
 pub struct FfiContext<'a, 'b> {
     pub ctx: &'a mut ExecutionContext<'b>,
-    constants: &'a [Constant],
+    pub vm: &'a mut Vm,
 }
 
 impl<'a, 'b> FfiContext<'a, 'b> {
-    pub fn new(ctx: &'a mut ExecutionContext<'b>, constants: &'a [Constant]) -> Self {
-        Self { ctx, constants }
+    pub fn new(ctx: &'a mut ExecutionContext<'b>, vm: &'a mut Vm) -> Self {
+        Self { ctx, vm }
     }
 
     /// Look up a unit by name from the constants table.
@@ -48,17 +48,28 @@ impl<'a, 'b> FfiContext<'a, 'b> {
         self.ctx
             .unit_name_to_constant_idx
             .get(name)
-            .and_then(|&idx| self.constants.get(idx as usize))
+            .and_then(|&idx| self.vm.constants.get(idx as usize))
             .and_then(|c| match c {
-                Constant::Unit(u) => Some(u.clone()),
+                crate::vm::Constant::Unit(u) => Some(u.clone()),
                 _ => None,
             })
+    }
+
+    pub fn invoke_callable(
+        &mut self,
+        callable: Value,
+        args: Args,
+        return_type: &TypeScheme,
+    ) -> Result<Value, Box<RuntimeErrorKind>> {
+        self.vm
+            .invoke_callable(self.ctx, callable, args, return_type)
     }
 }
 
 /// FFI function signature: (ffi_context, args, return_type) -> Result
 type FfiFunctionFn = fn(&mut FfiContext, Args, &TypeScheme) -> Result<Value, Box<RuntimeErrorKind>>;
 
+#[derive(Clone, Copy)]
 pub(crate) enum Callable {
     Function(FfiFunctionFn),
     Procedure(fn(&mut ExecutionContext, Args) -> ControlFlow),

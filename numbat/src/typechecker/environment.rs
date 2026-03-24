@@ -168,17 +168,23 @@ impl Environment {
         }
     }
 
-    pub(crate) fn generalize_types(&mut self, dtype_variables: &[TypeVariable]) {
+    pub(crate) fn generalize_types(
+        &mut self,
+        dtype_variables: &[TypeVariable],
+        shape_variables: &[TypeVariable],
+    ) {
         for (_, kind) in self.identifiers.iter_mut() {
             match kind {
                 IdentifierKind::Normal(t, _, _) => {
-                    t.generalize(dtype_variables);
+                    t.generalize(dtype_variables, shape_variables);
                 }
                 IdentifierKind::Function(signature, _) => {
-                    signature.fn_type.generalize(dtype_variables);
+                    signature
+                        .fn_type
+                        .generalize(dtype_variables, shape_variables);
                 }
                 IdentifierKind::Predefined(t) => {
-                    t.generalize(dtype_variables);
+                    t.generalize(dtype_variables, shape_variables);
                 }
             }
         }

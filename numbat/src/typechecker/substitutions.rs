@@ -76,9 +76,11 @@ impl ApplySubstitution for Type {
                 Ok(())
             }
             Type::Dimension(dtype) => dtype.apply(s),
+            Type::ShapeConstant(_) => Ok(()),
             Type::Boolean => Ok(()),
             Type::String => Ok(()),
             Type::DateTime => Ok(()),
+            Type::Array(element_type) => element_type.apply(s),
             Type::Fn(param_types, return_type) => {
                 for param_type in param_types {
                     param_type.apply(s)?;
@@ -98,7 +100,6 @@ impl ApplySubstitution for Type {
                 }
                 Ok(())
             }
-            Type::List(element_type) => element_type.apply(s),
         }
     }
 }
@@ -253,7 +254,7 @@ impl ApplySubstitution for Expression<'_> {
                 struct_type.apply(s)?;
                 field_type.apply(s)
             }
-            Expression::List {
+            Expression::Array {
                 elements,
                 type_scheme,
                 ..
@@ -294,6 +295,7 @@ impl ApplySubstitution for Statement<'_> {
                 fn_type.apply(s)
             }
             Statement::DefineDimension(_, _) => Ok(()),
+            Statement::DefineTypeAlias { .. } => Ok(()),
             Statement::DefineBaseUnit { type_scheme, .. } => type_scheme.apply(s),
             Statement::DefineDerivedUnit {
                 expr, type_scheme, ..

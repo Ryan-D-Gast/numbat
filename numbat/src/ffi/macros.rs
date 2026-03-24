@@ -21,13 +21,6 @@ macro_rules! scalar_arg {
 }
 pub(crate) use scalar_arg;
 
-macro_rules! list_arg {
-    ($args:ident) => {
-        arg!($args).unsafe_as_list()
-    };
-}
-pub(crate) use list_arg;
-
 macro_rules! string_arg {
     ($args:ident) => {
         arg!($args).unsafe_as_string()
@@ -62,13 +55,6 @@ macro_rules! return_boolean {
     };
 }
 pub(crate) use return_boolean;
-
-macro_rules! return_list {
-    ($value:expr) => {
-        Ok(Value::List($value.into()))
-    };
-}
-pub(crate) use return_list;
 
 macro_rules! return_string {
     (owned = $value:expr) => {

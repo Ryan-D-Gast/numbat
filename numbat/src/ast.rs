@@ -122,7 +122,8 @@ pub enum Expression<'a> {
         expr: Box<Expression<'a>>,
         field_name: &'a str,
     },
-    List(Span, Vec<Expression<'a>>),
+    Array(Span, Vec<Expression<'a>>),
+    Matrix(Span, Vec<Vec<Expression<'a>>>),
 }
 
 impl Expression<'_> {
@@ -156,7 +157,8 @@ impl Expression<'_> {
             Expression::String(span, _) => *span,
             Expression::InstantiateStruct { full_span, .. } => *full_span,
             Expression::AccessField { full_span, .. } => *full_span,
-            Expression::List(span, _) => *span,
+            Expression::Array(span, _) => *span,
+            Expression::Matrix(span, _) => *span,
             Expression::TypedHole(span) => *span,
         }
     }
@@ -259,15 +261,27 @@ macro_rules! struct_ {
 }
 
 #[cfg(test)]
-macro_rules! list {
+macro_rules! array {
     ( $( $val:expr ),* ) => {
-        crate::ast::Expression::List(
+        crate::ast::Expression::Array(
              Span::dummy(),
             vec![$($val,)*],
         )
     };
 }
 
+#[cfg(test)]
+macro_rules! matrix {
+    ( $( [ $( $val:expr ),* ] ),* ) => {
+        crate::ast::Expression::Matrix(
+             Span::dummy(),
+            vec![$(vec![$($val,)*],)*],
+        )
+    };
+}
+
+#[cfg(test)]
+pub(crate) use array;
 #[cfg(test)]
 pub(crate) use binop;
 #[cfg(test)]
@@ -279,9 +293,9 @@ pub(crate) use factorial;
 #[cfg(test)]
 pub(crate) use identifier;
 #[cfg(test)]
-pub(crate) use list;
-#[cfg(test)]
 pub(crate) use logical_neg;
+#[cfg(test)]
+pub(crate) use matrix;
 #[cfg(test)]
 pub(crate) use negate;
 #[cfg(test)]
@@ -295,8 +309,9 @@ pub enum TypeAnnotation {
     Bool(Span),
     String(Span),
     DateTime(Span),
+    ShapeConstant(Span, usize),
+    Array(Span, Box<TypeAnnotation>),
     Fn(Span, Vec<TypeAnnotation>, Box<TypeAnnotation>),
-    List(Span, Box<TypeAnnotation>),
 }
 
 impl TypeAnnotation {
@@ -306,8 +321,9 @@ impl TypeAnnotation {
             TypeAnnotation::Bool(span) => *span,
             TypeAnnotation::String(span) => *span,
             TypeAnnotation::DateTime(span) => *span,
+            TypeAnnotation::ShapeConstant(span, _) => *span,
+            TypeAnnotation::Array(span, _) => *span,
             TypeAnnotation::Fn(span, _, _) => *span,
-            TypeAnnotation::List(span, _) => *span,
         }
     }
 }
@@ -319,6 +335,13 @@ impl PrettyPrint for TypeAnnotation {
             TypeAnnotation::Bool(_) => m::type_identifier("Bool"),
             TypeAnnotation::String(_) => m::type_identifier("String"),
             TypeAnnotation::DateTime(_) => m::type_identifier("DateTime"),
+            TypeAnnotation::ShapeConstant(_, value) => m::value(format_compact!("{value}")),
+            TypeAnnotation::Array(_, element_type) => {
+                m::type_identifier("Array")
+                    + m::operator("<")
+                    + element_type.pretty_print()
+                    + m::operator(">")
+            }
             TypeAnnotation::Fn(_, parameter_types, return_type) => {
                 m::type_identifier("Fn")
                     + m::operator("[(")
@@ -333,12 +356,6 @@ impl PrettyPrint for TypeAnnotation {
                     + m::space()
                     + return_type.pretty_print()
                     + m::operator("]")
-            }
-            TypeAnnotation::List(_, element_type) => {
-                m::type_identifier("List")
-                    + m::operator("<")
-                    + element_type.pretty_print()
-                    + m::operator(">")
             }
         }
     }
@@ -449,6 +466,7 @@ impl ProcedureKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeParameterBound {
     Dim,
+    Shape,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -480,6 +498,13 @@ pub enum Statement<'a> {
         decorators: Vec<Decorator<'a>>,
     },
     DefineDimension(Span, &'a str, Vec<TypeExpression>),
+    DefineTypeAlias {
+        keyword_span: Span,
+        alias_name_span: Span,
+        alias_name: &'a str,
+        type_parameters: Vec<(Span, &'a str, Option<TypeParameterBound>)>,
+        aliased_type: TypeAnnotation,
+    },
     DefineBaseUnit(Span, &'a str, Option<TypeExpression>, Vec<Decorator<'a>>),
     DefineDerivedUnit {
         identifier_span: Span,
@@ -530,6 +555,11 @@ impl Statement<'_> {
                 }
                 full
             }
+            Statement::DefineTypeAlias {
+                keyword_span,
+                aliased_type,
+                ..
+            } => keyword_span.extend(&aliased_type.full_span()),
             Statement::DefineBaseUnit(span, _, type_expr, _) => {
                 let mut full = *span;
                 if let Some(te) = type_expr {
@@ -579,11 +609,14 @@ impl ReplaceSpans for TypeAnnotation {
             TypeAnnotation::Bool(_) => TypeAnnotation::Bool(Span::dummy()),
             TypeAnnotation::String(_) => TypeAnnotation::String(Span::dummy()),
             TypeAnnotation::DateTime(_) => TypeAnnotation::DateTime(Span::dummy()),
+            TypeAnnotation::ShapeConstant(_, value) => {
+                TypeAnnotation::ShapeConstant(Span::dummy(), *value)
+            }
+            TypeAnnotation::Array(_, element_type) => {
+                TypeAnnotation::Array(Span::dummy(), Box::new(element_type.replace_spans()))
+            }
             TypeAnnotation::Fn(_, pt, rt) => {
                 TypeAnnotation::Fn(Span::dummy(), pt.clone(), rt.clone())
-            }
-            TypeAnnotation::List(_, et) => {
-                TypeAnnotation::List(Span::dummy(), Box::new(et.replace_spans()))
             }
         }
     }
@@ -716,9 +749,15 @@ impl ReplaceSpans for Expression<'_> {
                 expr: Box::new(expr.replace_spans()),
                 field_name,
             },
-            Expression::List(_, elements) => Expression::List(
+            Expression::Array(_, elements) => Expression::Array(
                 Span::dummy(),
                 elements.iter().map(|e| e.replace_spans()).collect(),
+            ),
+            Expression::Matrix(_, rows) => Expression::Matrix(
+                Span::dummy(),
+                rows.iter()
+                    .map(|row| row.iter().map(|e| e.replace_spans()).collect())
+                    .collect(),
             ),
             Expression::TypedHole(_) => Expression::TypedHole(Span::dummy()),
         }
@@ -786,6 +825,21 @@ impl ReplaceSpans for Statement<'_> {
                 name,
                 dexprs.iter().map(|t| t.replace_spans()).collect(),
             ),
+            Statement::DefineTypeAlias {
+                alias_name,
+                type_parameters,
+                aliased_type,
+                ..
+            } => Statement::DefineTypeAlias {
+                keyword_span: Span::dummy(),
+                alias_name_span: Span::dummy(),
+                alias_name,
+                type_parameters: type_parameters
+                    .iter()
+                    .map(|(_, name, bound)| (Span::dummy(), *name, bound.clone()))
+                    .collect(),
+                aliased_type: aliased_type.replace_spans(),
+            },
             Statement::DefineBaseUnit(_, name, type_, decorators) => Statement::DefineBaseUnit(
                 Span::dummy(),
                 name,

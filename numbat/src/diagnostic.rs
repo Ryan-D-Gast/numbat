@@ -322,7 +322,7 @@ impl ErrorDiagnostic for TypeCheckError {
                     .with_notes(vec![inner_error])
                 }
             }
-            TypeCheckError::IncompatibleTypesInList(
+            TypeCheckError::IncompatibleTypesInArray(
                 span_first,
                 type_first,
                 span_subsequent,
@@ -356,6 +356,7 @@ impl ErrorDiagnostic for TypeCheckError {
             | TypeCheckError::NonRationalExponent(span)
             | TypeCheckError::OverflowInConstExpr(span)
             | TypeCheckError::ExpectedDimensionType(span, _)
+            | TypeCheckError::ExpectedShapeType(span, _)
             | TypeCheckError::ExpectedBool(span)
             | TypeCheckError::NoFunctionReferenceToGenericFunction(span)
             | TypeCheckError::DerivedUnitDefinitionMustNotBeGeneric(span)
@@ -481,6 +482,12 @@ impl ErrorDiagnostic for TypeCheckError {
                 ])
                 .with_notes(vec!["Missing fields: ".to_owned()])
                 .with_notes(missing.iter().map(|(n, t)| format!("{n}: {t}")).collect()),
+            TypeCheckError::EmptyMatrix(span)
+            | TypeCheckError::InconsistentMatrixRowLengths(span)
+            | TypeCheckError::MatrixElementsMustBeScalar(span) => d.with_labels(vec![
+                span.diagnostic_label(LabelStyle::Primary)
+                    .with_message(inner_error),
+            ]),
             TypeCheckError::NameResolutionError(inner) => {
                 return inner.diagnostics();
             }
@@ -503,6 +510,14 @@ impl ErrorDiagnostic for TypeCheckError {
                 ])
                 .with_notes(vec![
                     "Consider adding `: Dim` after the type parameter".to_owned(),
+                ]),
+            TypeCheckError::MissingShapeBound(span) => d
+                .with_labels(vec![
+                    span.diagnostic_label(LabelStyle::Primary)
+                        .with_message(inner_error),
+                ])
+                .with_notes(vec![
+                    "Consider adding `: Shape` after the type parameter".to_owned(),
                 ]),
             TypeCheckError::TypedHoleInStatement(span, type_, statement, matches) => {
                 let mut notes = vec![

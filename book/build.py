@@ -282,11 +282,11 @@ def generate_all_function_lists(inspect_binary):
 
     list_of_functions(
         inspect_binary,
-        "lists",
+        "arrays",
         {
-            "title": "List-related functions",
+            "title": "Array-related functions",
             "icon": "lucide/brackets",
-            "sections": [{"modules": ["core::lists"]}],
+            "sections": [{"modules": ["core::arrays"]}],
         },
     )
 

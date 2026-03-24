@@ -1,5 +1,5 @@
 use core::quantities
-use core::lists
+use core::arrays
 
 @name("Numerical differentiation")
 @url("https://en.wikipedia.org/wiki/Numerical_differentiation")
@@ -10,8 +10,8 @@ fn diff<X: Dim, Y: Dim>(f: Fn[(X) -> Y], x: X, Δx: X) -> Y / X =
   (f(x + Δx) - f(x - Δx)) / 2 Δx
 
 struct RungeKuttaResult<X: Dim, Y: Dim> {
-  xs: List<X>,
-  ys: List<Y>,
+  xs: Array<X>,
+  ys: Array<Y>,
 }
 
 fn _dsolve_runge_kutta<X: Dim, Y: Dim>(

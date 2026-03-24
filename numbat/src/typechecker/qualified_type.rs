@@ -9,6 +9,7 @@ use super::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Bound {
     IsDim(Type),
+    IsShape(Type),
 }
 
 /// A set of bounds constraining type variables (e.g., `D: Dim`).
@@ -41,6 +42,13 @@ impl Bounds {
     pub fn is_dtype_bound(&self, tv: &TypeVariable) -> bool {
         self.0.iter().any(|b| match b {
             Bound::IsDim(Type::TVar(v)) => v == tv,
+            _ => false,
+        })
+    }
+
+    pub fn is_shape_bound(&self, tv: &TypeVariable) -> bool {
+        self.0.iter().any(|b| match b {
+            Bound::IsShape(Type::TVar(v)) => v == tv,
             _ => false,
         })
     }
@@ -95,6 +103,7 @@ impl QualifiedType {
                 .iter()
                 .map(|b| match b {
                     Bound::IsDim(t) => Bound::IsDim(t.instantiate(type_variables)),
+                    Bound::IsShape(t) => Bound::IsShape(t.instantiate(type_variables)),
                 })
                 .collect(),
         }
@@ -105,8 +114,10 @@ impl ApplySubstitution for QualifiedType {
     fn apply(&mut self, substitution: &Substitution) -> Result<(), SubstitutionError> {
         self.inner.apply(substitution)?;
 
-        for Bound::IsDim(v) in self.bounds.iter_mut() {
-            v.apply(substitution)?;
+        for bound in self.bounds.iter_mut() {
+            match bound {
+                Bound::IsDim(v) | Bound::IsShape(v) => v.apply(substitution)?,
+            }
         }
         Ok(())
     }

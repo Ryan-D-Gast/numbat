@@ -352,12 +352,13 @@ pub enum Type {
     TVar(TypeVariable),
     TPar(CompactString),
     Dimension(DType),
+    ShapeConstant(usize),
     Boolean,
     String,
     DateTime,
+    Array(Box<Type>),
     Fn(Vec<Type>, Box<Type>),
     Struct(Box<StructInfo>),
-    List(Box<Type>),
 }
 
 impl std::fmt::Display for Type {
@@ -369,9 +370,11 @@ impl std::fmt::Display for Type {
             }
             Type::TPar(name) => write!(f, "{name}"),
             Type::Dimension(d) => d.fmt(f),
+            Type::ShapeConstant(value) => write!(f, "{value}"),
             Type::Boolean => write!(f, "Bool"),
             Type::String => write!(f, "String"),
             Type::DateTime => write!(f, "DateTime"),
+            Type::Array(element_type) => write!(f, "Array<{element_type}>"),
             Type::Fn(param_types, return_type) => {
                 write!(
                     f,
@@ -399,7 +402,6 @@ impl std::fmt::Display for Type {
                         .join(", ")
                 )
             }
-            Type::List(element_type) => write!(f, "List<{element_type}>"),
         }
     }
 }
@@ -413,9 +415,16 @@ impl PrettyPrint for Type {
             }
             Type::TPar(name) => m::type_identifier(name.clone()),
             Type::Dimension(d) => d.pretty_print(),
+            Type::ShapeConstant(value) => m::value(format_compact!("{value}")),
             Type::Boolean => m::type_identifier("Bool"),
             Type::String => m::type_identifier("String"),
             Type::DateTime => m::type_identifier("DateTime"),
+            Type::Array(element_type) => {
+                m::type_identifier("Array")
+                    + m::operator("<")
+                    + element_type.pretty_print()
+                    + m::operator(">")
+            }
             Type::Fn(param_types, return_type) => {
                 m::type_identifier("Fn")
                     + m::operator("[(")
@@ -446,12 +455,6 @@ impl PrettyPrint for Type {
                 }
                 markup
             }
-            Type::List(element_type) => {
-                m::type_identifier("List")
-                    + m::operator("<")
-                    + element_type.pretty_print()
-                    + m::operator(">")
-            }
         }
     }
 }
@@ -460,6 +463,12 @@ impl Type {
     pub fn to_readable_type(&self, registry: &DimensionRegistry) -> Markup {
         match self {
             Type::Dimension(d) => d.to_readable_type(registry),
+            Type::Array(element_type) => {
+                m::type_identifier("Array")
+                    + m::operator("<")
+                    + element_type.to_readable_type(registry)
+                    + m::operator(">")
+            }
             Type::Struct(info) => {
                 let mut markup = m::type_identifier(info.name.clone());
                 if let StructKind::Instance(type_args) = &info.kind
@@ -475,12 +484,6 @@ impl Type {
                 }
                 markup
             }
-            Type::List(element_type) => {
-                m::type_identifier("List")
-                    + m::operator("<")
-                    + element_type.to_readable_type(registry)
-                    + m::operator(">")
-            }
             _ => self.pretty_print(),
         }
     }
@@ -491,6 +494,10 @@ impl Type {
 
     pub fn is_dtype(&self) -> bool {
         matches!(self, Type::Dimension(..))
+    }
+
+    pub fn is_shape(&self) -> bool {
+        matches!(self, Type::ShapeConstant(..))
     }
 
     pub fn is_fn_type(&self) -> bool {
@@ -515,12 +522,13 @@ impl Type {
 
             // Same constructors might be compatible (need further unification)
             (Dimension(_), Dimension(_))
+            | (ShapeConstant(_), ShapeConstant(_))
             | (Boolean, Boolean)
             | (String, String)
             | (DateTime, DateTime)
+            | (Array(_), Array(_))
             | (Fn(_, _), Fn(_, _))
-            | (Struct(_), Struct(_))
-            | (List(_), List(_)) => false,
+            | (Struct(_), Struct(_)) => false,
 
             // Different concrete constructors are incompatible
             _ => true,
@@ -538,7 +546,8 @@ impl Type {
                 }
             }
             Type::Dimension(d) => d.type_variables(including_type_parameters),
-            Type::Boolean | Type::String | Type::DateTime => vec![],
+            Type::ShapeConstant(_) | Type::Boolean | Type::String | Type::DateTime => vec![],
+            Type::Array(element_type) => element_type.type_variables(including_type_parameters),
             Type::Fn(param_types, return_type) => {
                 let mut vars = return_type.type_variables(including_type_parameters);
                 for param_type in param_types {
@@ -555,7 +564,6 @@ impl Type {
                 }
                 vars
             }
-            Type::List(element_type) => element_type.type_variables(including_type_parameters),
         }
     }
 
@@ -574,7 +582,10 @@ impl Type {
             Type::TVar(v) => Type::TVar(v.clone()),
             Type::TPar(n) => Type::TPar(n.clone()),
             Type::Dimension(d) => Type::Dimension(d.instantiate(type_variables)),
-            Type::Boolean | Type::String | Type::DateTime => self.clone(),
+            Type::ShapeConstant(_) | Type::Boolean | Type::String | Type::DateTime => self.clone(),
+            Type::Array(element_type) => {
+                Type::Array(Box::new(element_type.instantiate(type_variables)))
+            }
             Type::Fn(param_types, return_type) => Type::Fn(
                 param_types
                     .iter()
@@ -608,9 +619,6 @@ impl Type {
                     kind: instantiated_kind,
                     fields: instantiated_fields,
                 }))
-            }
-            Type::List(element_type) => {
-                Type::List(Box::new(element_type.instantiate(type_variables)))
             }
         }
     }
@@ -740,8 +748,9 @@ pub enum Expression<'a> {
         struct_type: TypeScheme,
         field_type: TypeScheme,
     },
-    List {
+    Array {
         span: Span,
+        shape: Vec<usize>,
         elements: Vec<Expression<'a>>,
         type_scheme: TypeScheme,
     },
@@ -782,7 +791,7 @@ impl Expression<'_> {
             Expression::String(span, _) => *span,
             Expression::InstantiateStruct { span, .. } => *span,
             Expression::AccessField { full_span, .. } => *full_span,
-            Expression::List { span, .. } => *span,
+            Expression::Array { span, .. } => *span,
             Expression::TypedHole(span, _) => *span,
         }
     }
@@ -819,6 +828,11 @@ pub enum Statement<'a> {
         readable_return_type: Markup,
     },
     DefineDimension(&'a str, Vec<TypeExpression>),
+    DefineTypeAlias {
+        name: &'a str,
+        type_parameters: Vec<(&'a str, Option<TypeParameterBound>)>,
+        aliased_type: TypeAnnotation,
+    },
     DefineBaseUnit {
         name: &'a str,
         identifier_span: Span,
@@ -852,8 +866,14 @@ impl Statement<'_> {
         }
     }
 
-    pub(crate) fn generalize_types(&mut self, dtype_variables: &[TypeVariable]) {
-        self.for_all_type_schemes(&mut |type_: &mut TypeScheme| type_.generalize(dtype_variables));
+    pub(crate) fn generalize_types(
+        &mut self,
+        dtype_variables: &[TypeVariable],
+        shape_variables: &[TypeVariable],
+    ) {
+        self.for_all_type_schemes(&mut |type_: &mut TypeScheme| {
+            type_.generalize(dtype_variables, shape_variables)
+        });
     }
 
     fn create_readable_type(
@@ -927,6 +947,7 @@ impl Statement<'_> {
                 }
             }
             Statement::DefineDimension(_, _) => {}
+            Statement::DefineTypeAlias { .. } => {}
             Statement::DefineBaseUnit { .. } => {}
             Statement::DefineDerivedUnit {
                 type_annotation,
@@ -1043,8 +1064,8 @@ impl Expression<'_> {
                 Type::Struct(Box::new(struct_info.clone()))
             }
             Expression::AccessField { field_type, .. } => field_type.unsafe_as_concrete(),
-            Expression::List { type_scheme, .. } => {
-                Type::List(Box::new(type_scheme.unsafe_as_concrete()))
+            Expression::Array { type_scheme, .. } => {
+                Type::Array(Box::new(type_scheme.unsafe_as_concrete()))
             }
             Expression::TypedHole(_, type_) => type_.unsafe_as_concrete(),
         }
@@ -1067,12 +1088,12 @@ impl Expression<'_> {
                 TypeScheme::make_quantified(Type::Struct(Box::new(struct_info.clone())))
             }
             Expression::AccessField { field_type, .. } => field_type.clone(),
-            Expression::List { type_scheme, .. } => match type_scheme {
-                TypeScheme::Concrete(t) => TypeScheme::Concrete(Type::List(Box::new(t.clone()))),
+            Expression::Array { type_scheme, .. } => match type_scheme {
+                TypeScheme::Concrete(t) => TypeScheme::Concrete(Type::Array(Box::new(t.clone()))),
                 TypeScheme::Quantified(ngen, qt) => TypeScheme::Quantified(
                     *ngen,
                     crate::typechecker::qualified_type::QualifiedType {
-                        inner: Type::List(Box::new(qt.inner.clone())),
+                        inner: Type::Array(Box::new(qt.inner.clone())),
                         bounds: qt.bounds.clone(),
                     },
                 ),
@@ -1186,6 +1207,8 @@ pub fn pretty_print_function_signature<'a>(
                     m::type_identifier(tv.unsafe_name().to_compact_string())
                         + if fn_type.bounds.is_dtype_bound(tv) {
                             m::operator(":") + m::space() + m::type_identifier("Dim")
+                        } else if fn_type.bounds.is_shape_bound(tv) {
+                            m::operator(":") + m::space() + m::type_identifier("Shape")
                         } else {
                             m::empty()
                         }
@@ -1316,6 +1339,47 @@ impl PrettyPrint for Statement<'_> {
                     )
                     .sum()
             }
+            Statement::DefineTypeAlias {
+                name,
+                type_parameters,
+                aliased_type,
+            } => {
+                let markup_type_parameters = if type_parameters.is_empty() {
+                    m::empty()
+                } else {
+                    m::operator("<")
+                        + Itertools::intersperse(
+                            type_parameters.iter().map(|(name, bound)| {
+                                m::type_identifier((*name).to_compact_string())
+                                    + match bound {
+                                        Some(TypeParameterBound::Dim) => {
+                                            m::operator(":")
+                                                + m::space()
+                                                + m::type_identifier("Dim")
+                                        }
+                                        Some(TypeParameterBound::Shape) => {
+                                            m::operator(":")
+                                                + m::space()
+                                                + m::type_identifier("Shape")
+                                        }
+                                        None => m::empty(),
+                                    }
+                            }),
+                            m::operator(",") + m::space(),
+                        )
+                        .sum()
+                        + m::operator(">")
+                };
+
+                m::keyword("type")
+                    + m::space()
+                    + m::type_identifier((*name).to_compact_string())
+                    + markup_type_parameters
+                    + m::space()
+                    + m::operator("=")
+                    + m::space()
+                    + aliased_type.pretty_print()
+            }
             Statement::DefineBaseUnit {
                 name,
                 decorators,
@@ -1412,7 +1476,7 @@ fn with_parens(expr: &Expression) -> Markup {
         | Expression::String(..)
         | Expression::InstantiateStruct { .. }
         | Expression::AccessField { .. }
-        | Expression::List { .. }
+        | Expression::Array { .. }
         | Expression::TypedHole(_, _) => expr.pretty_print(),
         Expression::UnaryOperator { .. }
         | Expression::BinaryOperator { .. }
@@ -1717,15 +1781,35 @@ impl PrettyPrint for Expression<'_> {
                     + m::operator(".")
                     + m::identifier(field_name.to_compact_string())
             }
-            List { elements, .. } => {
-                m::operator("[")
-                    + itertools::Itertools::intersperse(
-                        elements.iter().map(|e| e.pretty_print()),
-                        m::operator(",") + m::space(),
-                    )
-                    .sum()
-                    + m::operator("]")
-            }
+            Array {
+                shape, elements, ..
+            } => match shape.as_slice() {
+                [_] => {
+                    m::operator("[")
+                        + itertools::Itertools::intersperse(
+                            elements.iter().map(|e| e.pretty_print()),
+                            m::operator(",") + m::space(),
+                        )
+                        .sum()
+                        + m::operator("]")
+                }
+                [rows, cols] => {
+                    m::operator("[")
+                        + itertools::Itertools::intersperse(
+                            (0..*rows).map(|row| {
+                                itertools::Itertools::intersperse(
+                                    (0..*cols).map(|col| elements[row * cols + col].pretty_print()),
+                                    m::operator(",") + m::space(),
+                                )
+                                .sum::<Markup>()
+                            }),
+                            m::operator(";") + m::space(),
+                        )
+                        .sum()
+                        + m::operator("]")
+                }
+                _ => unreachable!("typed arrays are limited to rank 1 or 2"),
+            },
             TypedHole(_, _) => m::operator("?"),
         }
     }

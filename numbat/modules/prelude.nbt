@@ -2,7 +2,8 @@ use core::scalar
 use core::quantities
 use core::dimensions
 use core::functions
-use core::lists
+use core::arrays
+use core::linalg
 use core::strings
 use core::error
 use core::debug

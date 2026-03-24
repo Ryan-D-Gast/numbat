@@ -5,6 +5,7 @@ use super::macros::*;
 use crate::interpreter::RuntimeErrorKind;
 use crate::quantity::Quantity;
 use crate::typechecker::type_scheme::TypeScheme;
+use crate::value::ArrayValue;
 use crate::value::Value;
 
 pub fn str_length(
@@ -66,10 +67,35 @@ pub fn ord(
     let input = string_arg!(args);
 
     if input.is_empty() {
-        return Err(Box::new(RuntimeErrorKind::EmptyList));
+        return Err(Box::new(RuntimeErrorKind::EmptyArray));
     }
 
     let output = input.chars().next().unwrap() as u32;
 
     return_scalar!(output as f64)
+}
+
+pub fn split(
+    _ctx: &mut FfiContext,
+    mut args: Args,
+    _return_type: &TypeScheme,
+) -> Result<Value, Box<RuntimeErrorKind>> {
+    let input = string_arg!(args);
+    let separator = string_arg!(args);
+
+    let parts = if input.is_empty() {
+        Vec::new()
+    } else if separator.is_empty() {
+        input
+            .chars()
+            .map(|ch| Value::String(ch.to_string().into()))
+            .collect()
+    } else {
+        input
+            .split(separator.as_str())
+            .map(|part| Value::String(part.into()))
+            .collect()
+    };
+
+    Ok(Value::Array(ArrayValue::from_values(parts)))
 }

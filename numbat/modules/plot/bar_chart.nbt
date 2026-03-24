@@ -1,22 +1,22 @@
-use core::lists
+use core::arrays
 use plot::common
 
 struct BarChart<V: Dim> {
   value_label: String,
-  values: List<V>,
-  x_labels: List<String>,
+  values: Array<V>,
+  x_labels: Array<String>,
 }
 
 fn _default_label(n: Scalar) -> String = "{n}"
 
-fn bar_chart<V: Dim>(values: List<V>) -> BarChart<V> =
+fn bar_chart<V: Dim>(values: Array<V>) -> BarChart<V> =
   BarChart {
     value_label: "",
     values: values,
     x_labels: map(_default_label, range(1, len(values))),
   }
 
-fn xlabels<V: Dim>(ls: List<String>, chart: BarChart<V>) -> BarChart<V> =
+fn xlabels<V: Dim>(ls: Array<String>, chart: BarChart<V>) -> BarChart<V> =
   BarChart {
     value_label: chart.value_label,
     values: chart.values,

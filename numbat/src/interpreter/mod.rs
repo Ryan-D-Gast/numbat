@@ -78,8 +78,20 @@ pub enum RuntimeErrorKind {
     #[error("Chemical element not found: {0}")]
     ChemicalElementNotFound(String),
 
-    #[error("Empty list")]
-    EmptyList,
+    #[error("Empty array")]
+    EmptyArray,
+
+    #[error("Expected a 1-dimensional array")]
+    ExpectedVector,
+
+    #[error("Incompatible array shapes")]
+    IncompatibleArrayShape,
+
+    #[error("Expected an array shape with one or two dimensions")]
+    UnsupportedArrayRank,
+
+    #[error("Array shape entries must be non-negative integers")]
+    InvalidArrayShape,
 
     #[error("Could not write to file: {0:?}")]
     FileWrite(std::path::PathBuf),
@@ -227,7 +239,27 @@ mod tests {
         unit hertz: Frequency = 1 / second
 
         fn sin(x: Scalar) -> Scalar
-        fn atan2<D>(y: D, x: D) -> Scalar";
+        fn is_infinite(x: Scalar) -> Bool
+        fn atan2<D>(y: D, x: D) -> Scalar
+        fn vcat<A>(xs1: Array<A>, xs2: Array<A>) -> Array<A>
+        fn hcat<A>(xs1: Array<A>, xs2: Array<A>) -> Array<A>
+        fn shape<A>(x: Array<A>) -> Array<Scalar>
+        fn reshape<A>(x: Array<A>, new_shape: Array<Scalar>) -> Array<A>
+        fn element_at<A>(i: Scalar, x: Array<A>) -> A
+        fn range(start: Scalar, end: Scalar) -> Array<Scalar>
+        fn fill<A>(value: A, shape: Array<Scalar>) -> Array<A>
+        fn contains<T>(x: T, xs: Array<T>) -> Bool
+        fn map<T, U>(f: Fn[(T) -> U], xs: Array<T>) -> Array<U>
+        fn map2<T, U, V>(f: Fn[(T, U) -> V], other: T, xs: Array<U>) -> Array<V>
+        fn filter<T>(p: Fn[(T) -> Bool], xs: Array<T>) -> Array<T>
+        fn foldl<T, U>(f: Fn[(T, U) -> T], acc: T, xs: Array<U>) -> T
+        fn sort_by_key<T, D: Dim>(key: Fn[(T) -> D], xs: Array<T>) -> Array<T>
+        fn transpose<D>(x: Array<D>) -> Array<D>
+        fn zeros(shape: Array<Scalar>) -> Array<Scalar>
+        fn ones(shape: Array<Scalar>) -> Array<Scalar>
+        fn eye(shape: Array<Scalar>) -> Array<Scalar>
+        fn identity(shape: Array<Scalar>) -> Array<Scalar> = eye(shape)
+        fn split(input: String, separator: String) -> Array<String>";
 
     #[track_caller]
     fn get_interpreter_result(input: &str) -> Result<InterpreterResult> {
@@ -370,6 +402,250 @@ mod tests {
     fn foreign_functions() {
         assert_evaluates_to_scalar("sin(1)", 1.0f64.sin());
         assert_evaluates_to_scalar("atan2(2 meter, 1 meter)", 2.0f64.atan2(1.0f64));
+
+        assert_eq!(
+            get_interpreter_result("transpose([1, 2; 3, 4])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(3.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(2.0)),
+                        Value::Quantity(Quantity::from_scalar(4.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_evaluates_to_scalar("element_at(2, [3, 2, 1, 0])", 1.0);
+
+        assert_eq!(
+            get_interpreter_result("vcat([1, 2; 3, 4], [5, 6])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(2.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(3.0)),
+                        Value::Quantity(Quantity::from_scalar(4.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(5.0)),
+                        Value::Quantity(Quantity::from_scalar(6.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("shape([1, 2; 3, 4])").unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::Quantity(Quantity::from_scalar(2.0)),
+                Value::Quantity(Quantity::from_scalar(2.0)),
+            ])))
+        );
+
+        assert_eq!(
+            get_interpreter_result("reshape([1, 2, 3, 4], [2, 2])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(2.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(3.0)),
+                        Value::Quantity(Quantity::from_scalar(4.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("hcat([1, 2; 3, 4], [5; 6])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(2.0)),
+                        Value::Quantity(Quantity::from_scalar(5.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(3.0)),
+                        Value::Quantity(Quantity::from_scalar(4.0)),
+                        Value::Quantity(Quantity::from_scalar(6.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("zeros([2, 3])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("ones([2, 2])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("eye([3, 3])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("identity([3, 3])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                    ],
+                    vec![
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(0.0)),
+                        Value::Quantity(Quantity::from_scalar(1.0)),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("fill(\"x\", [2, 2])").unwrap(),
+            InterpreterResult::Value(Value::Array(
+                crate::value::ArrayValue::from_rows(vec![
+                    vec![
+                        Value::String(CompactString::from("x")),
+                        Value::String(CompactString::from("x")),
+                    ],
+                    vec![
+                        Value::String(CompactString::from("x")),
+                        Value::String(CompactString::from("x")),
+                    ],
+                ])
+                .unwrap()
+            ))
+        );
+
+        assert_eq!(
+            get_interpreter_result("map(sin, [0, 1])").unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::Quantity(Quantity::from_scalar(0.0f64.sin())),
+                Value::Quantity(Quantity::from_scalar(1.0f64.sin())),
+            ])))
+        );
+
+        assert_eq!(
+            get_interpreter_result("map2(contains, 2, [[0], [2], [1, 2], []])").unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::Boolean(false),
+                Value::Boolean(true),
+                Value::Boolean(true),
+                Value::Boolean(false),
+            ])))
+        );
+
+        assert_eq!(
+            get_interpreter_result("filter(is_infinite, [0, inf, 2, -inf])").unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::Quantity(Quantity::from_scalar(f64::INFINITY)),
+                Value::Quantity(Quantity::from_scalar(f64::NEG_INFINITY)),
+            ])))
+        );
+
+        assert_eq!(
+            get_interpreter_result("range(2, 4)").unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::Quantity(Quantity::from_scalar(2.0)),
+                Value::Quantity(Quantity::from_scalar(3.0)),
+                Value::Quantity(Quantity::from_scalar(4.0)),
+            ])))
+        );
+
+        assert_eq!(
+            get_interpreter_result("split(\"one two three\", \" \")").unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::String(CompactString::from("one")),
+                Value::String(CompactString::from("two")),
+                Value::String(CompactString::from("three")),
+            ])))
+        );
+
+        assert_eq!(
+            get_interpreter_result("fn negate(x: Scalar) = -x\nsort_by_key(negate, [3, 1, 2])")
+                .unwrap(),
+            InterpreterResult::Value(Value::Array(crate::value::ArrayValue::from_values(vec![
+                Value::Quantity(Quantity::from_scalar(3.0)),
+                Value::Quantity(Quantity::from_scalar(2.0)),
+                Value::Quantity(Quantity::from_scalar(1.0)),
+            ])))
+        );
+
+        assert_evaluates_to_scalar(
+            "fn add(x: Scalar, y: Scalar) = x + y\nfoldl(add, 0, [1, 2, 3, 4])",
+            10.0,
+        );
     }
 
     #[test]

@@ -1,15 +1,15 @@
 use std::sync::Arc;
 
 use compact_str::{CompactString, ToCompactString};
-use itertools::Itertools;
 use jiff::Zoned;
 
 use crate::{
-    list::NumbatList,
     pretty_print::{FormatOptions, PrettyPrint},
     quantity::Quantity,
     typed_ast::StructInfo,
 };
+
+pub use crate::array::ArrayValue;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FunctionReference {
@@ -41,7 +41,13 @@ pub enum Value {
     FunctionReference(FunctionReference),
     FormatSpecifiers(Option<CompactString>),
     StructInstance(Arc<StructInfo>, Vec<Value>),
-    List(NumbatList<Value>),
+    Array(ArrayValue),
+}
+
+impl From<ArrayValue> for Value {
+    fn from(array: ArrayValue) -> Self {
+        Value::Array(array)
+    }
 }
 
 impl Value {
@@ -100,11 +106,10 @@ impl Value {
     }
 
     #[track_caller]
-    pub fn unsafe_as_list(self) -> NumbatList<Value> {
-        if let Value::List(values) = self {
-            values
-        } else {
-            panic!("Expected value to be a list");
+    pub fn unsafe_as_array(self) -> ArrayValue {
+        match self {
+            Value::Array(array) => array,
+            _ => panic!("Expected value to be an array"),
         }
     }
 
@@ -136,18 +141,12 @@ impl std::fmt::Display for Value {
                             .keys()
                             .zip(values)
                             .map(|(name, value)| name.to_owned() + ": " + &value.to_string())
+                            .collect::<Vec<_>>()
                             .join(", ")
                     )
                 }
             ),
-            Value::List(elements) => write!(
-                f,
-                "[{}]",
-                elements
-                    .iter()
-                    .map(|element| element.to_string())
-                    .join(", ")
-            ),
+            Value::Array(array) => write!(f, "{array}"),
         }
     }
 }
@@ -173,32 +172,22 @@ impl Value {
                     + if values.is_empty() {
                         crate::markup::empty()
                     } else {
-                        crate::markup::space()
-                            + itertools::Itertools::intersperse(
-                                struct_info.fields.keys().zip(values).map(|(name, val)| {
-                                    crate::markup::identifier(name.clone())
-                                        + crate::markup::operator(":")
-                                        + crate::markup::space()
-                                        + val.pretty_print_with(options)
-                                }),
-                                crate::markup::operator(",") + crate::markup::space(),
-                            )
-                            .sum()
+                        itertools::Itertools::intersperse(
+                            struct_info.fields.keys().zip(values).map(|(name, val)| {
+                                crate::markup::space()
+                                    + crate::markup::identifier(name.clone())
+                                    + crate::markup::operator(":")
+                                    + crate::markup::space()
+                                    + val.pretty_print_with(options)
+                            }),
+                            crate::markup::operator(","),
+                        )
+                        .sum::<crate::markup::Markup>()
                             + crate::markup::space()
                     }
                     + crate::markup::operator("}")
             }
-            Value::List(elements) => {
-                crate::markup::operator("[")
-                    + itertools::Itertools::intersperse(
-                        elements
-                            .iter()
-                            .map(|element| element.pretty_print_with(options)),
-                        crate::markup::operator(",") + crate::markup::space(),
-                    )
-                    .sum()
-                    + crate::markup::operator("]")
-            }
+            Value::Array(array) => array.pretty_print_with(options),
         }
     }
 }

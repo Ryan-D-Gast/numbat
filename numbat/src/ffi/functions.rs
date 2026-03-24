@@ -11,9 +11,9 @@ use super::{Callable, ForeignFunction, Result};
 static FFI_FUNCTIONS: OnceLock<HashMap<&'static str, ForeignFunction>> = OnceLock::new();
 
 pub(crate) fn functions() -> &'static HashMap<&'static str, ForeignFunction> {
+    use super::arrays::*;
     use super::currency::*;
     use super::datetime::*;
-    use super::lists::*;
     use super::lookup::*;
     use super::math::*;
     use super::plot::*;
@@ -83,12 +83,35 @@ pub(crate) fn functions() -> &'static HashMap<&'static str, ForeignFunction> {
 
         insert_function!(random, 0..=0);
 
-        // Lists
+        // Arrays
         insert_function!(len, 1..=1);
         insert_function!(head, 1..=1);
         insert_function!(tail, 1..=1);
         insert_function!(cons, 2..=2);
         insert_function!(cons_end, 2..=2);
+        insert_function!(take, 2..=2);
+        insert_function!(drop, 2..=2);
+        insert_function!(element_at, 2..=2);
+        insert_function!(range, 2..=2);
+        insert_function!(fill, 2..=2);
+        insert_function!(zeros, 1..=1);
+        insert_function!(ones, 1..=1);
+        insert_function!(eye, 1..=1);
+        insert_function!(contains, 2..=2);
+        insert_function!(reverse, 1..=1);
+        insert_function!(unique, 1..=1);
+        insert_function!(intersperse, 2..=2);
+        insert_function!(map, 2..=2);
+        insert_function!(map2, 3..=3);
+        insert_function!(filter, 2..=2);
+        insert_function!(foldl, 3..=3);
+        insert_function!(sort_by_key, 2..=2);
+        insert_function!(join, 2..=2);
+        insert_function!(vcat, 2..=2);
+        insert_function!(shape, 1..=1);
+        insert_function!(reshape, 2..=2);
+        insert_function!(transpose, 1..=1);
+        insert_function!(hcat, 2..=2);
 
         // Strings
         insert_function!(str_length, 1..=1);
@@ -97,6 +120,7 @@ pub(crate) fn functions() -> &'static HashMap<&'static str, ForeignFunction> {
         insert_function!(str_slice, 3..=3);
         insert_function!(chr, 1..=1);
         insert_function!(ord, 1..=1);
+        insert_function!(split, 2..=2);
 
         // Date and time
         insert_function!(now, 0..=0);
@@ -273,9 +297,9 @@ fn args_(
     _args: Args,
     _return_type: &TypeScheme,
 ) -> Result<Value, Box<RuntimeErrorKind>> {
-    let args: std::collections::VecDeque<Value> = std::env::args()
+    let args: Vec<Value> = std::env::args()
         .skip(1)
         .map(|s| Value::String(s.into()))
         .collect();
-    Ok(args.into())
+    Ok(Value::Array(crate::value::ArrayValue::from_values(args)))
 }

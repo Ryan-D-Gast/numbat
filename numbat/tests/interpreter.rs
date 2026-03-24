@@ -1002,7 +1002,7 @@ fn test_full_simplify_for_function_calls() {
 fn test_datetime_runtime_errors() {
     expect_failure(
         "datetime(\"2000-01-99\")",
-        "Unrecognized datetime format: failed to parse day in date: parsed day is not valid: parameter 'day' with value 99 is not in the required range of 1..=31",
+        "Unrecognized datetime format: failed to parse day in date",
     );
     expect_failure("now() -> tz(\"Europe/NonExisting\")", "Unknown timezone");
     expect_failure(

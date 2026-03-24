@@ -16,7 +16,7 @@ pub enum ConstraintSolverError {
 /// or by replacing an existing constraint with new constraints.
 ///
 /// For example, the unification constraint `T1 ~ Bool` can be solved with
-/// the substitution `T1 := Bool`. The constraint `List<T1> ~ List<T2>`
+/// the substitution `T1 := Bool`. The constraint `Array<T1> ~ Array<T2>`
 /// can be solved by replacing it with a `T1 ~ T2` constraint. And the
 /// constraint `T0/T1: Dim` can be 'solved' by replacing it with two new
 /// constraints `T0: Dim` and `T1: Dim`.
@@ -78,11 +78,17 @@ impl ConstraintSet {
         self.add(Constraint::IsDType(type_.clone()))
     }
 
+    pub(crate) fn add_shape_constraint(&mut self, type_: &Type) -> TrivialResolution {
+        self.add(Constraint::IsShape(type_.clone()))
+    }
+
     pub fn clear(&mut self) {
         self.constraints.clear();
     }
 
-    pub fn solve(&mut self) -> Result<(Substitution, Vec<TypeVariable>), ConstraintSolverError> {
+    pub fn solve(
+        &mut self,
+    ) -> Result<(Substitution, Vec<TypeVariable>, Vec<TypeVariable>), ConstraintSolverError> {
         let mut substitution = Substitution::empty();
 
         let mut made_progress = true;
@@ -114,21 +120,23 @@ impl ConstraintSet {
         }
 
         // Solve remaining type class constraints (if possible), by remembering
-        // `T_i: Dim` bounds for those type variables
+        // `T_i: Dim` / `T_i: Shape` bounds for those type variables
         let mut dtypes = vec![];
+        let mut shapes = vec![];
         let mut remaining_constraints = vec![];
         for c in self.iter() {
-            match c.get_dtype_constraint_type_variable() {
-                None => {
-                    remaining_constraints.push(c.clone());
-                }
-                Some(name) => {
-                    dtypes.push(name);
-                }
+            if let Some(name) = c.get_dtype_constraint_type_variable() {
+                dtypes.push(name);
+            } else if let Some(name) = c.get_shape_constraint_type_variable() {
+                shapes.push(name);
+            } else {
+                remaining_constraints.push(c.clone());
             }
         }
         dtypes.sort();
         dtypes.dedup();
+        shapes.sort();
+        shapes.dedup();
 
         if !remaining_constraints.is_empty() {
             return Err(ConstraintSolverError::CouldNotSolve(
@@ -139,7 +147,7 @@ impl ConstraintSet {
             ));
         }
 
-        Ok((substitution, dtypes))
+        Ok((substitution, dtypes, shapes))
     }
 
     fn remove(&mut self, i: usize) {
@@ -189,6 +197,7 @@ impl TrivialResolution {
 pub enum Constraint {
     Equal(Type, Type),
     IsDType(Type),
+    IsShape(Type),
     EqualScalar(DType),
     HasField(Type, CompactString, Type),
 }
@@ -219,6 +228,11 @@ impl Constraint {
                 _ => TrivialResolution::Violated,
             },
             Constraint::IsDType(_) => TrivialResolution::Unknown,
+            Constraint::IsShape(t) if t.is_closed() => match t {
+                Type::ShapeConstant(_) => TrivialResolution::Satisfied,
+                _ => TrivialResolution::Violated,
+            },
+            Constraint::IsShape(_) => TrivialResolution::Unknown,
             Constraint::EqualScalar(d) if d.is_scalar() => TrivialResolution::Satisfied,
             Constraint::EqualScalar(d) if d.type_variables(false).is_empty() => {
                 TrivialResolution::Violated
@@ -280,7 +294,7 @@ impl Constraint {
 
                 Some(Satisfied::with_new_constraints(new_constraints))
             }
-            Constraint::Equal(Type::List(s1), Type::List(t1)) => {
+            Constraint::Equal(Type::Array(s1), Type::Array(t1)) => {
                 Some(Satisfied::with_new_constraints(vec![Constraint::Equal(
                     s1.as_ref().clone(),
                     t1.as_ref().clone(),
@@ -327,6 +341,8 @@ impl Constraint {
                 Some(Satisfied::with_new_constraints(new_constraints))
             }
             Constraint::IsDType(_) => None,
+            Constraint::IsShape(Type::ShapeConstant(_)) => Some(Satisfied::trivially()),
+            Constraint::IsShape(_) => None,
             Constraint::EqualScalar(d) if d == &DType::scalar() => Some(Satisfied::trivially()),
             Constraint::EqualScalar(dtype) => match dtype.split_first_factor() {
                 Some(((DTypeFactor::TVar(tv), k), rest)) => {
@@ -364,6 +380,7 @@ impl Constraint {
                 format_compact!("{t1} ~ {t2}")
             }
             Constraint::IsDType(t) => format_compact!("{t}: DType"),
+            Constraint::IsShape(t) => format_compact!("{t}: Shape"),
             Constraint::EqualScalar(d) => format_compact!("{d} = Scalar"),
             Constraint::HasField(struct_type, field_name, field_type) => {
                 format_compact!("HasField({struct_type}, \"{field_name}\", {field_type})")
@@ -379,6 +396,14 @@ impl Constraint {
             _ => None,
         }
     }
+
+    fn get_shape_constraint_type_variable(&self) -> Option<TypeVariable> {
+        match self {
+            Constraint::IsShape(Type::TVar(tvar)) => Some(tvar.clone()),
+            Constraint::IsShape(Type::TPar(name)) => Some(TypeVariable::new(name.clone())),
+            _ => None,
+        }
+    }
 }
 
 impl ApplySubstitution for Constraint {
@@ -389,6 +414,9 @@ impl ApplySubstitution for Constraint {
                 t2.apply(substitution)?;
             }
             Constraint::IsDType(t) => {
+                t.apply(substitution)?;
+            }
+            Constraint::IsShape(t) => {
                 t.apply(substitution)?;
             }
             Constraint::EqualScalar(d) => d.apply(substitution)?,

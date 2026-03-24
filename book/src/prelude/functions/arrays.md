@@ -2,15 +2,15 @@
 icon: lucide/brackets
 ---
 
-# List-related functions
+# Array-related functions
 
-Defined in: `core::lists`
+Defined in: `core::arrays`
 
 ### `len`
-Get the length of a list.
+Get the length of a 1-D array.
 
 ```nbt
-fn len<A>(xs: List<A>) -> Scalar
+fn len<A>(xs: Array<A>) -> Scalar
 ```
 
 !!! example "Example"
@@ -22,10 +22,10 @@ fn len<A>(xs: List<A>) -> Scalar
     [:material-play-circle: Run this example](https://numbat.dev/?q=len%28%5B3%2C%202%2C%201%5D%29){ .md-button }
 
 ### `head`
-Get the first element of a list. Yields a runtime error if the list is empty.
+Get the first element of a 1-D array. Yields a runtime error if the array is empty.
 
 ```nbt
-fn head<A>(xs: List<A>) -> A
+fn head<A>(xs: Array<A>) -> A
 ```
 
 !!! example "Example"
@@ -37,55 +37,55 @@ fn head<A>(xs: List<A>) -> A
     [:material-play-circle: Run this example](https://numbat.dev/?q=head%28%5B3%2C%202%2C%201%5D%29){ .md-button }
 
 ### `tail`
-Get everything but the first element of a list. Yields a runtime error if the list is empty.
+Get everything but the first element of a 1-D array. Yields a runtime error if the array is empty.
 
 ```nbt
-fn tail<A>(xs: List<A>) -> List<A>
+fn tail<A>(xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     tail([3, 2, 1])
 
-        = [2, 1]    [List<Scalar>]
+        = [2, 1]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=tail%28%5B3%2C%202%2C%201%5D%29){ .md-button }
 
 ### `cons`
-Prepend an element to a list.
+Prepend an element to a 1-D array.
 
 ```nbt
-fn cons<A>(x: A, xs: List<A>) -> List<A>
+fn cons<A>(x: A, xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     cons(77, [3, 2, 1])
 
-        = [77, 3, 2, 1]    [List<Scalar>]
+        = [77, 3, 2, 1]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=cons%2877%2C%20%5B3%2C%202%2C%201%5D%29){ .md-button }
 
 ### `cons_end`
-Append an element to the end of a list.
+Append an element to the end of a 1-D array.
 
 ```nbt
-fn cons_end<A>(x: A, xs: List<A>) -> List<A>
+fn cons_end<A>(x: A, xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     cons_end(77, [3, 2, 1])
 
-        = [3, 2, 1, 77]    [List<Scalar>]
+        = [3, 2, 1, 77]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=cons%5Fend%2877%2C%20%5B3%2C%202%2C%201%5D%29){ .md-button }
 
 ### `is_empty`
-Check if a list is empty.
+Check if a 1-D array is empty.
 
 ```nbt
-fn is_empty<A>(xs: List<A>) -> Bool
+fn is_empty<A>(xs: Array<A>) -> Bool
 ```
 
 !!! example "Example"
@@ -104,56 +104,86 @@ fn is_empty<A>(xs: List<A>) -> Bool
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=is%5Fempty%28%5B%5D%29){ .md-button }
 
-### `concat`
-Concatenate two lists.
+### `vcat`
+Concatenate two arrays along the first axis.
 
 ```nbt
-fn concat<A>(xs1: List<A>, xs2: List<A>) -> List<A>
+fn vcat<A>(xs1: Array<A>, xs2: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
-    concat([3, 2, 1], [10, 11])
+    vcat([3, 2, 1], [10, 11])
 
-        = [3, 2, 1, 10, 11]    [List<Scalar>]
+        = [3, 2, 1, 10, 11]    [Array<Scalar>]
     ```
-    [:material-play-circle: Run this example](https://numbat.dev/?q=concat%28%5B3%2C%202%2C%201%5D%2C%20%5B10%2C%2011%5D%29){ .md-button }
+    [:material-play-circle: Run this example](https://numbat.dev/?q=vcat%28%5B3%2C%202%2C%201%5D%2C%20%5B10%2C%2011%5D%29){ .md-button }
 
-### `take`
-Get the first `n` elements of a list.
+### `shape`
+Return the shape of an array.
 
 ```nbt
-fn take<A>(n: Scalar, xs: List<A>) -> List<A>
+fn shape<A>(xs: Array<A>) -> Array<Scalar>
+```
+
+!!! example "Example"
+    ```nbt
+    shape([1, 2; 3, 4])
+
+        = [2, 2]    [Array<Scalar>]
+    ```
+    [:material-play-circle: Run this example](https://numbat.dev/?q=shape%28%5B1%2C%202%3B%203%2C%204%5D%29){ .md-button }
+
+### `reshape`
+Reshape an array to a new 1D or 2D shape.
+
+```nbt
+fn reshape<A>(xs: Array<A>, new_shape: Array<Scalar>) -> Array<A>
+```
+
+!!! example "Example"
+    ```nbt
+    reshape([1, 2, 3, 4], [2, 2])
+
+        = [1, 2; 3, 4]    [Array<Scalar>]
+    ```
+    [:material-play-circle: Run this example](https://numbat.dev/?q=reshape%28%5B1%2C%202%2C%203%2C%204%5D%2C%20%5B2%2C%202%5D%29){ .md-button }
+
+### `take`
+Get the first `n` elements of a 1-D array.
+
+```nbt
+fn take<A>(n: Scalar, xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     take(2, [3, 2, 1, 0])
 
-        = [3, 2]    [List<Scalar>]
+        = [3, 2]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=take%282%2C%20%5B3%2C%202%2C%201%2C%200%5D%29){ .md-button }
 
 ### `drop`
-Get everything but the first `n` elements of a list.
+Get everything but the first `n` elements of a 1-D array.
 
 ```nbt
-fn drop<A>(n: Scalar, xs: List<A>) -> List<A>
+fn drop<A>(n: Scalar, xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     drop(2, [3, 2, 1, 0])
 
-        = [1, 0]    [List<Scalar>]
+        = [1, 0]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=drop%282%2C%20%5B3%2C%202%2C%201%2C%200%5D%29){ .md-button }
 
 ### `element_at`
-Get the element at index `i` in a list.
+Get the element at index `i` in a 1-D array.
 
 ```nbt
-fn element_at<A>(i: Scalar, xs: List<A>) -> A
+fn element_at<A>(i: Scalar, xs: Array<A>) -> A
 ```
 
 !!! example "Example"
@@ -168,85 +198,85 @@ fn element_at<A>(i: Scalar, xs: List<A>) -> A
 Generate a range of integer numbers from `start` to `end` (inclusive).
 
 ```nbt
-fn range(start: Scalar, end: Scalar) -> List<Scalar>
+fn range(start: Scalar, end: Scalar) -> Array<Scalar>
 ```
 
 !!! example "Example"
     ```nbt
     range(2, 12)
 
-        = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]    [List<Scalar>]
+        = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=range%282%2C%2012%29){ .md-button }
 
 ### `reverse`
-Reverse the order of a list.
+Reverse the order of a 1-D array.
 
 ```nbt
-fn reverse<A>(xs: List<A>) -> List<A>
+fn reverse<A>(xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     reverse([3, 2, 1])
 
-        = [1, 2, 3]    [List<Scalar>]
+        = [1, 2, 3]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=reverse%28%5B3%2C%202%2C%201%5D%29){ .md-button }
 
 ### `map`
-Generate a new list by applying a function to each element of the input list.
+Generate a new 1-D array by applying a function to each element of the input array.
 
 ```nbt
-fn map<A, B>(f: Fn[(A) -> B], xs: List<A>) -> List<B>
+fn map<A, B>(f: Fn[(A) -> B], xs: Array<A>) -> Array<B>
 ```
 
-!!! example "Square all elements of a list."
+!!! example "Square all elements of a 1-D array."
     ```nbt
     map(sqr, [3, 2, 1])
 
-        = [9, 4, 1]    [List<Scalar>]
+        = [9, 4, 1]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=map%28sqr%2C%20%5B3%2C%202%2C%201%5D%29){ .md-button }
 
 ### `map2`
-Generate a new list by applying a function to each element of the input list. This function takes two inputs: a variable, and the element of the list.
+Generate a new 1-D array by applying a function to each element of the input array. This function takes two inputs: a variable, and the element of the array.
 
 ```nbt
-fn map2<A, B, C>(f: Fn[(A, B) -> C], other: A, xs: List<B>) -> List<C>
+fn map2<A, B, C>(f: Fn[(A, B) -> C], other: A, xs: Array<B>) -> Array<C>
 ```
 
-!!! example "Returns a list of bools corresponding to whether the sublist contains a 2 or not."
+!!! example "Returns a 1-D array of bools corresponding to whether the sub-array contains a 2 or not."
     ```nbt
     map2(contains, 2, [[0], [2], [1, 2], [0, 2, 3], []])
 
-        = [false, true, true, true, false]    [List<Bool>]
+        = [false, true, true, true, false]    [Array<Bool>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=map2%28contains%2C%202%2C%20%5B%5B0%5D%2C%20%5B2%5D%2C%20%5B1%2C%202%5D%2C%20%5B0%2C%202%2C%203%5D%2C%20%5B%5D%5D%29){ .md-button }
 
 ### `filter`
-Filter a list by a predicate.
+Filter a 1-D array by a predicate.
 
 ```nbt
-fn filter<A>(p: Fn[(A) -> Bool], xs: List<A>) -> List<A>
+fn filter<A>(p: Fn[(A) -> Bool], xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     filter(is_finite, [0, 1e10, NaN, -inf])
 
-        = [0, 10_000_000_000]    [List<Scalar>]
+        = [0, 10_000_000_000]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=filter%28is%5Ffinite%2C%20%5B0%2C%201e10%2C%20NaN%2C%20%2Dinf%5D%29){ .md-button }
 
 ### `foldl`
-Fold a function over a list.
+Fold a function over a 1-D array.
 
 ```nbt
-fn foldl<A, B>(f: Fn[(A, B) -> A], acc: A, xs: List<B>) -> A
+fn foldl<A, B>(f: Fn[(A, B) -> A], acc: A, xs: Array<B>) -> A
 ```
 
-!!! example "Join a list of strings by folding."
+!!! example "Join an array of strings by folding."
     ```nbt
     foldl(str_append, "", ["Num", "bat", "!"])
 
@@ -255,10 +285,10 @@ fn foldl<A, B>(f: Fn[(A, B) -> A], acc: A, xs: List<B>) -> A
     [:material-play-circle: Run this example](https://numbat.dev/?q=foldl%28str%5Fappend%2C%20%22%22%2C%20%5B%22Num%22%2C%20%22bat%22%2C%20%22%21%22%5D%29){ .md-button }
 
 ### `sort_by_key`
-Sort a list of elements, using the given key function that maps the element to a quantity.
+Sort a 1-D array of elements, using the given key function that maps the element to a quantity.
 
 ```nbt
-fn sort_by_key<A, D: Dim>(key: Fn[(A) -> D], xs: List<A>) -> List<A>
+fn sort_by_key<A, D: Dim>(key: Fn[(A) -> D], xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Sort by last digit."
@@ -266,30 +296,30 @@ fn sort_by_key<A, D: Dim>(key: Fn[(A) -> D], xs: List<A>) -> List<A>
     fn last_digit(x) = mod(x, 10)
     sort_by_key(last_digit, [701, 313, 9999, 4])
 
-        = [701, 313, 4, 9999]    [List<Scalar>]
+        = [701, 313, 4, 9999]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=fn%20last%5Fdigit%28x%29%20%3D%20mod%28x%2C%2010%29%0Asort%5Fby%5Fkey%28last%5Fdigit%2C%20%5B701%2C%20313%2C%209999%2C%204%5D%29){ .md-button }
 
 ### `sort`
-Sort a list of quantities in ascending order.
+Sort a 1-D array of quantities in ascending order.
 
 ```nbt
-fn sort<D: Dim>(xs: List<D>) -> List<D>
+fn sort<D: Dim>(xs: Array<D>) -> Array<D>
 ```
 
 !!! example "Example"
     ```nbt
     sort([3, 2, 7, 8, -4, 0, -5])
 
-        = [-5, -4, 0, 2, 3, 7, 8]    [List<Scalar>]
+        = [-5, -4, 0, 2, 3, 7, 8]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=sort%28%5B3%2C%202%2C%207%2C%208%2C%20%2D4%2C%200%2C%20%2D5%5D%29){ .md-button }
 
 ### `contains`
-Returns true if the element `x` is in the list `xs`.
+Returns true if the element `x` is in the 1-D array `xs`.
 
 ```nbt
-fn contains<A>(x: A, xs: List<A>) -> Bool
+fn contains<A>(x: A, xs: Array<A>) -> Bool
 ```
 
 !!! example "Example"
@@ -309,40 +339,40 @@ fn contains<A>(x: A, xs: List<A>) -> Bool
     [:material-play-circle: Run this example](https://numbat.dev/?q=%5B3%2C%202%2C%207%2C%208%2C%20%2D4%2C%200%2C%20%2D5%5D%20%7C%3E%20contains%281%29){ .md-button }
 
 ### `unique`
-Remove duplicates from a given list.
+Remove duplicates from a given 1-D array.
 
 ```nbt
-fn unique<A>(xs: List<A>) -> List<A>
+fn unique<A>(xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     unique([1, 2, 2, 3, 3, 3])
 
-        = [1, 2, 3]    [List<Scalar>]
+        = [1, 2, 3]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=unique%28%5B1%2C%202%2C%202%2C%203%2C%203%2C%203%5D%29){ .md-button }
 
 ### `intersperse`
-Add an element between each pair of elements in a list.
+Add an element between each pair of elements in a 1-D array.
 
 ```nbt
-fn intersperse<A>(sep: A, xs: List<A>) -> List<A>
+fn intersperse<A>(sep: A, xs: Array<A>) -> Array<A>
 ```
 
 !!! example "Example"
     ```nbt
     intersperse(0, [1, 1, 1, 1])
 
-        = [1, 0, 1, 0, 1, 0, 1]    [List<Scalar>]
+        = [1, 0, 1, 0, 1, 0, 1]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=intersperse%280%2C%20%5B1%2C%201%2C%201%2C%201%5D%29){ .md-button }
 
 ### `sum`
-Sum all elements of a list.
+Sum all elements of a 1-D array.
 
 ```nbt
-fn sum<D: Dim>(xs: List<D>) -> D
+fn sum<D: Dim>(xs: Array<D>) -> D
 ```
 
 !!! example "Example"
@@ -354,25 +384,25 @@ fn sum<D: Dim>(xs: List<D>) -> D
     [:material-play-circle: Run this example](https://numbat.dev/?q=sum%28%5B3%20m%2C%20200%20cm%2C%201000%20mm%5D%29){ .md-button }
 
 ### `linspace`
-Generate a list of `n_steps` evenly spaced numbers from `start` to `end` (inclusive).
+Generate a 1-D array of `n_steps` evenly spaced numbers from `start` to `end` (inclusive).
 
 ```nbt
-fn linspace<D: Dim>(start: D, end: D, n_steps: Scalar) -> List<D>
+fn linspace<D: Dim>(start: D, end: D, n_steps: Scalar) -> Array<D>
 ```
 
 !!! example "Example"
     ```nbt
     linspace(-5 m, 5 m, 11)
 
-        = [-5 m, -4 m, -3 m, -2 m, -1 m, 0 m, 1 m, 2 m, 3 m, 4 m, 5 m]    [List<Length>]
+        = [-5 m, -4 m, -3 m, -2 m, -1 m, 0 m, 1 m, 2 m, 3 m, 4 m, 5 m]    [Array<Length>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=linspace%28%2D5%20m%2C%205%20m%2C%2011%29){ .md-button }
 
 ### `join`
-Convert a list of strings into a single string by concatenating them with a separator.
+Convert an array of strings into a single string by concatenating them with a separator.
 
 ```nbt
-fn join(xs: List<String>, sep: String) -> String
+fn join(xs: Array<String>, sep: String) -> String
 ```
 
 !!! example "Example"
@@ -384,17 +414,17 @@ fn join(xs: List<String>, sep: String) -> String
     [:material-play-circle: Run this example](https://numbat.dev/?q=join%28%5B%22snake%22%2C%20%22case%22%5D%2C%20%22%5F%22%29){ .md-button }
 
 ### `split`
-Split a string into a list of strings using a separator.
+Split a string into an array of strings using a separator.
 
 ```nbt
-fn split(input: String, separator: String) -> List<String>
+fn split(input: String, separator: String) -> Array<String>
 ```
 
 !!! example "Example"
     ```nbt
     split("Numbat is a statically typed programming language.", " ")
 
-        = ["Numbat", "is", "a", "statically", "typed", "programming", "language."]    [List<String>]
+        = ["Numbat", "is", "a", "statically", "typed", "programming", "language."]    [Array<String>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=split%28%22Numbat%20is%20a%20statically%20typed%20programming%20language%2E%22%2C%20%22%20%22%29){ .md-button }
 

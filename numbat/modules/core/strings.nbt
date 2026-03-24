@@ -55,6 +55,10 @@ fn str_find(needle: String, haystack: String) -> Scalar =
 fn str_contains(needle: String, haystack: String) -> Bool =
   str_find(needle, haystack) != -1
 
+@description("Split a string into an array of strings using a separator")
+@example("split(\"Numbat is a statically typed programming language.\", \" \")")
+fn split(input: String, separator: String) -> Array<String>
+
 @description("Replace all occurrences of a substring in a string")
 @example("str_replace(\"statically typed programming language\", \"scientific calculator\", \"Numbat is a statically typed programming language.\")")
 fn str_replace(pattern: String, replacement: String, s: String) -> String =

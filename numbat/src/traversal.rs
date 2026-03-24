@@ -95,7 +95,7 @@ impl ForAllTypeSchemes for Expression<'_> {
                 f(struct_type);
                 f(field_type);
             }
-            Expression::List {
+            Expression::Array {
                 elements,
                 type_scheme,
                 ..
@@ -138,6 +138,7 @@ impl ForAllTypeSchemes for Statement<'_> {
                 f(fn_type);
             }
             Statement::DefineDimension(_, _) => {}
+            Statement::DefineTypeAlias { .. } => {}
             Statement::DefineBaseUnit { type_scheme, .. } => {
                 f(type_scheme);
             }
@@ -179,6 +180,7 @@ impl ForAllExpressions for Statement<'_> {
                 }
             }
             Statement::DefineDimension(_, _) => {}
+            Statement::DefineTypeAlias { .. } => {}
             Statement::DefineBaseUnit { .. } => {}
             Statement::DefineDerivedUnit { expr, .. } => expr.for_all_expressions(f),
             Statement::ProcedureCall { args, .. } => {
@@ -238,7 +240,7 @@ impl ForAllExpressions for Expression<'_> {
             Expression::AccessField { expr, .. } => {
                 expr.for_all_expressions(f);
             }
-            Expression::List { elements, .. } => {
+            Expression::Array { elements, .. } => {
                 for element in elements {
                     element.for_all_expressions(f);
                 }

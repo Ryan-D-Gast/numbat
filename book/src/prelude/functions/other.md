@@ -372,14 +372,14 @@ Defined in: `units::mixed`
 Convert a value to a mixed representation using the provided units.
 
 ```nbt
-fn unit_list<D: Dim>(units: List<D>, value: D) -> List<D>
+fn unit_list<D: Dim>(units: Array<D>, value: D) -> Array<D>
 ```
 
 !!! example "Example"
     ```nbt
     5500 m |> unit_list([miles, yards, feet, inches])
 
-        = [3 mi, 734 yd, 2 ft, 7.43307 in]    [List<Length>]
+        = [3 mi, 734 yd, 2 ft, 7.43307 in]    [Array<Length>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=5500%20m%20%7C%3E%20unit%5Flist%28%5Bmiles%2C%20yards%2C%20feet%2C%20inches%5D%29){ .md-button }
 
@@ -388,14 +388,14 @@ Convert an angle to a mixed degrees, (arc)minutes, and (arc)seconds representati
 More information [here](https://en.wikipedia.org/wiki/Sexagesimal_degree).
 
 ```nbt
-fn DMS(alpha: Angle) -> List<Angle>
+fn DMS(alpha: Angle) -> Array<Angle>
 ```
 
 !!! example "Example"
     ```nbt
     46.5858° -> DMS
 
-        = [46°, 35′, 8.88″]    [List<Scalar>]
+        = [46°, 35′, 8.88″]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=46%2E5858%C2%B0%20%2D%3E%20DMS){ .md-button }
 
@@ -404,14 +404,14 @@ Convert an angle to a mixed degrees and decimal minutes representation.
 More information [here](https://en.wikipedia.org/wiki/Decimal_degrees).
 
 ```nbt
-fn DM(alpha: Angle) -> List<Angle>
+fn DM(alpha: Angle) -> Array<Angle>
 ```
 
 !!! example "Example"
     ```nbt
     46.5858° -> DM
 
-        = [46°, 35.148′]    [List<Scalar>]
+        = [46°, 35.148′]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=46%2E5858%C2%B0%20%2D%3E%20DM){ .md-button }
 
@@ -420,14 +420,14 @@ Convert a length to a mixed feet and inches representation.
 More information [here](https://en.wikipedia.org/wiki/Foot_(unit)).
 
 ```nbt
-fn feet_and_inches(length: Length) -> List<Length>
+fn feet_and_inches(length: Length) -> Array<Length>
 ```
 
 !!! example "Example"
     ```nbt
     180 cm -> feet_and_inches
 
-        = [5 ft, 10.8661 in]    [List<Length>]
+        = [5 ft, 10.8661 in]    [Array<Length>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=180%20cm%20%2D%3E%20feet%5Fand%5Finches){ .md-button }
 
@@ -436,14 +436,14 @@ Convert a mass to a mixed pounds and ounces representation.
 More information [here](https://en.wikipedia.org/wiki/Pound_(mass)).
 
 ```nbt
-fn pounds_and_ounces(mass: Mass) -> List<Mass>
+fn pounds_and_ounces(mass: Mass) -> Array<Mass>
 ```
 
 !!! example "Example"
     ```nbt
     1 kg -> pounds_and_ounces
 
-        = [2 lb, 3.27396 oz]    [List<Mass>]
+        = [2 lb, 3.27396 oz]    [Array<Mass>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=1%20kg%20%2D%3E%20pounds%5Fand%5Founces){ .md-button }
 

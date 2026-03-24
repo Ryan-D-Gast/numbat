@@ -88,6 +88,9 @@ pub enum TypeCheckError {
     #[error("Expected dimension type, got {1} instead")]
     ExpectedDimensionType(Span, Type),
 
+    #[error("Expected shape type, got {1} instead")]
+    ExpectedShapeType(Span, Type),
+
     #[error("Expected boolean value")]
     ExpectedBool(Span),
 
@@ -156,8 +159,17 @@ pub enum TypeCheckError {
     #[error("Missing fields in struct instantiation")]
     MissingFieldsInStructInstantiation(Span, Span, Vec<(CompactString, Type)>),
 
-    #[error("Incompatible types in list: expected '{1}', got '{3}' instead")]
-    IncompatibleTypesInList(Span, Type, Span, Type),
+    #[error("Empty matrix literal")]
+    EmptyMatrix(Span),
+
+    #[error("Matrix rows must all have the same length")]
+    InconsistentMatrixRowLengths(Span),
+
+    #[error("Matrix elements must be scalar values")]
+    MatrixElementsMustBeScalar(Span),
+
+    #[error("Incompatible types in array: expected '{1}', got '{3}' instead")]
+    IncompatibleTypesInArray(Span, Type, Span, Type),
 
     #[error(transparent)]
     NameResolutionError(#[from] NameResolutionError),
@@ -172,6 +184,9 @@ pub enum TypeCheckError {
 
     #[error("Missing dimension bound for type parameter")]
     MissingDimBound(Span),
+
+    #[error("Missing shape bound for type parameter")]
+    MissingShapeBound(Span),
 
     #[error(
         "Type for exponentiation operation can not be inferred for this case, consider adding a type annotation for the base"

@@ -47,7 +47,7 @@ nav = [
     "basics/operations.md",
     "basics/variables.md",
     "basics/printing-strings.md",
-    "basics/lists.md",
+    "basics/arrays.md",
     "basics/structs.md",
     "basics/conditionals.md",
     "basics/functions.md",
@@ -70,7 +70,7 @@ nav = [
     { "List of functions" = [
       "prelude/functions/index.md",
       "prelude/functions/math.md",
-      "prelude/functions/lists.md",
+      "prelude/functions/arrays.md",
       "prelude/functions/strings.md",
       "prelude/functions/datetime.md",
       "prelude/functions/other.md",

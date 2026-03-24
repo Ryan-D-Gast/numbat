@@ -138,6 +138,10 @@ impl TypeScheme {
                     markup += m::operator(":");
                     markup += m::space();
                     markup += m::type_identifier("Dim");
+                } else if instantiated_type.bounds.is_shape_bound(type_parameter) {
+                    markup += m::operator(":");
+                    markup += m::space();
+                    markup += m::type_identifier("Shape");
                 }
                 markup += m::operator(".");
             }
@@ -158,7 +162,11 @@ impl TypeScheme {
         }
     }
 
-    pub(crate) fn generalize(&mut self, dtype_variables: &[TypeVariable]) {
+    pub(crate) fn generalize(
+        &mut self,
+        dtype_variables: &[TypeVariable],
+        shape_variables: &[TypeVariable],
+    ) {
         let free_variables = self.type_variables(true);
 
         let TypeScheme::Concrete(type_) = self else {
@@ -173,6 +181,12 @@ impl TypeScheme {
             .iter()
             .filter(|v| type_.contains(v, true))
             .map(|v| Bound::IsDim(Type::TVar(v.clone())))
+            .chain(
+                shape_variables
+                    .iter()
+                    .filter(|v| type_.contains(v, true))
+                    .map(|v| Bound::IsShape(Type::TVar(v.clone()))),
+            )
             .collect();
         let qualified_type = QualifiedType::new(type_.clone(), bounds);
 
@@ -234,6 +248,10 @@ impl PrettyPrint for TypeScheme {
                         markup += m::operator(":");
                         markup += m::space();
                         markup += m::type_identifier("Dim");
+                    } else if instantiated_type.bounds.is_shape_bound(type_parameter) {
+                        markup += m::operator(":");
+                        markup += m::space();
+                        markup += m::type_identifier("Shape");
                     }
                     markup += m::operator(".");
                     markup += m::space();

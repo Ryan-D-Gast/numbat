@@ -386,12 +386,31 @@ impl BytecodeInterpreter {
                 self.vm
                     .patch_u16_value_at(else_jump_offset, end_offset - (else_jump_offset + 2));
             }
-            Expression::List { span, elements, .. } => {
+            Expression::Array {
+                span,
+                shape,
+                elements,
+                ..
+            } => {
                 for element in elements {
                     self.compile_expression(element);
                 }
 
-                self.vm.add_op1(Op::BuildList, elements.len() as u16, *span);
+                let rank = shape
+                    .len()
+                    .try_into()
+                    .expect("array rank must fit into u16");
+                let dim0 = shape[0]
+                    .try_into()
+                    .expect("array dimension must fit into u16");
+                let dim1 = shape
+                    .get(1)
+                    .copied()
+                    .unwrap_or(0)
+                    .try_into()
+                    .expect("array dimension must fit into u16");
+
+                self.vm.add_op3(Op::BuildArray, rank, dim0, dim1, *span);
             }
             Expression::TypedHole(_, _) => {
                 unreachable!("Typed holes cause type inference errors")
@@ -484,6 +503,9 @@ impl BytecodeInterpreter {
             Statement::DefineDimension(_name, _dexprs) => {
                 // Declaring a dimension is like introducing a new type. The information
                 // is only relevant for the type checker. Nothing happens at run time.
+            }
+            Statement::DefineTypeAlias { .. } => {
+                // Type aliases are compile-time only.
             }
             Statement::DefineBaseUnit {
                 name: unit_name,

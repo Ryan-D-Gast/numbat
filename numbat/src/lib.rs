@@ -1,4 +1,5 @@
 mod arithmetic;
+mod array;
 mod ast;
 #[cfg(feature = "html-formatter")]
 pub mod buffered_writer;
@@ -17,7 +18,6 @@ pub mod help;
 pub mod html_formatter;
 mod interpreter;
 pub mod keywords;
-pub mod list;
 pub mod markup;
 mod math;
 pub mod module_importer;
@@ -510,7 +510,7 @@ impl Context {
                     }
                 }
 
-                // List units that belong to this dimension
+                // Collect the units that belong to this dimension
                 let matching_units: Vec<CompactString> = self
                     .unit_representations()
                     .filter_map(|(_unit_name, (_unit_base_rep, unit_metadata))| {

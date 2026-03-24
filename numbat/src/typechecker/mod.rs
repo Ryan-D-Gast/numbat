@@ -66,6 +66,12 @@ struct ProperFunctionCallArgs<'a, 'b> {
     argument_types: Vec<Type>,
 }
 
+#[derive(Clone)]
+struct TypeAliasInfo {
+    type_parameters: Vec<(Span, CompactString, Option<TypeParameterBound>)>,
+    aliased_type: Type,
+}
+
 fn proper_function_call<'a>(
     ProperFunctionCallArgs {
         registry,
@@ -97,8 +103,15 @@ fn proper_function_call<'a>(
         TypeScheme::Quantified(_, _) => {
             let qt = fn_type.instantiate(name_generator);
 
-            for Bound::IsDim(t) in qt.bounds.iter() {
-                constraints.add_dtype_constraint(t).ok();
+            for bound in qt.bounds.iter() {
+                match bound {
+                    Bound::IsDim(t) => {
+                        constraints.add_dtype_constraint(t).ok();
+                    }
+                    Bound::IsShape(t) => {
+                        constraints.add_shape_constraint(t).ok();
+                    }
+                }
             }
 
             qt.inner
@@ -182,6 +195,7 @@ fn proper_function_call<'a>(
 #[derive(Clone, Default)]
 pub struct TypeChecker {
     structs: HashMap<CompactString, StructInfo>,
+    type_aliases: HashMap<CompactString, TypeAliasInfo>,
     registry: DimensionRegistry,
 
     type_namespace: Namespace,
@@ -217,6 +231,10 @@ impl TypeChecker {
         self.constraints.add_dtype_constraint(type_)
     }
 
+    fn add_shape_constraint(&mut self, type_: &Type) -> TrivialResolution {
+        self.constraints.add_shape_constraint(type_)
+    }
+
     fn enforce_dtype(&mut self, type_: &Type, span: Span) -> Result<()> {
         if self
             .constraints
@@ -232,9 +250,100 @@ impl TypeChecker {
         Ok(())
     }
 
+    fn shape_from_annotation(&self, annotation: &TypeAnnotation) -> Result<Type> {
+        match annotation {
+            TypeAnnotation::ShapeConstant(_, value) => Ok(Type::ShapeConstant(*value)),
+            TypeAnnotation::TypeExpression(TypeExpression::TypeIdentifier(
+                span,
+                name,
+                type_args,
+            )) if type_args.is_empty() => {
+                if let Some((_, _, bound)) = self
+                    .registry
+                    .introduced_type_parameters
+                    .iter()
+                    .find(|(_, param_name, _)| param_name == name)
+                {
+                    return match bound {
+                        Some(TypeParameterBound::Dim) => Err(Box::new(
+                            TypeCheckError::ExpectedShapeType(*span, Type::TPar(name.clone())),
+                        )),
+                        Some(TypeParameterBound::Shape) | None => Ok(Type::TPar(name.clone())),
+                    };
+                }
+                Err(Box::new(TypeCheckError::ExpectedShapeType(
+                    annotation.full_span(),
+                    self.type_from_annotation(annotation)?,
+                )))
+            }
+            _ => Err(Box::new(TypeCheckError::ExpectedShapeType(
+                annotation.full_span(),
+                self.type_from_annotation(annotation)?,
+            ))),
+        }
+    }
+
     fn type_from_annotation(&self, annotation: &TypeAnnotation) -> Result<Type> {
         match annotation {
             TypeAnnotation::TypeExpression(dexpr) => {
+                if let TypeExpression::TypeIdentifier(span, name, type_args) = dexpr
+                    && let Some((_, _, bound)) = self
+                        .registry
+                        .introduced_type_parameters
+                        .iter()
+                        .find(|(_, param_name, _)| param_name == name)
+                {
+                    if !type_args.is_empty() {
+                        return Err(Box::new(TypeCheckError::ExpectedDimensionType(
+                            *span,
+                            Type::TPar(name.clone()),
+                        )));
+                    }
+
+                    return match bound {
+                        Some(TypeParameterBound::Shape) => Err(Box::new(
+                            TypeCheckError::ExpectedDimensionType(*span, Type::TPar(name.clone())),
+                        )),
+                        Some(TypeParameterBound::Dim) | None => {
+                            Ok(Type::Dimension(DType::from_type_parameter(name.clone())))
+                        }
+                    };
+                }
+
+                if let TypeExpression::TypeIdentifier(span, name, type_args) = dexpr
+                    && let Some(alias_info) = self.type_aliases.get(name)
+                {
+                    if type_args.len() != alias_info.type_parameters.len() {
+                        return Err(Box::new(TypeCheckError::WrongNumberOfTypeArguments {
+                            span: *span,
+                            type_name: name.to_string(),
+                            expected: alias_info.type_parameters.len(),
+                            actual: type_args.len(),
+                        }));
+                    }
+
+                    let mut instantiated = alias_info.aliased_type.clone();
+                    let mut substitution = Substitution::empty();
+                    for ((_, param_name, bound), arg) in
+                        alias_info.type_parameters.iter().zip(type_args.iter())
+                    {
+                        let arg_type = match bound {
+                            Some(TypeParameterBound::Shape) => self.shape_from_annotation(arg)?,
+                            Some(TypeParameterBound::Dim) | None => {
+                                self.type_from_annotation(arg)?
+                            }
+                        };
+                        substitution.append(TypeVariable::new(param_name), arg_type);
+                    }
+                    instantiated.apply(&substitution).map_err(|e| {
+                        Box::new(TypeCheckError::SubstitutionError(
+                            annotation.pretty_print().to_string(),
+                            e,
+                        ))
+                    })?;
+                    return Ok(instantiated);
+                }
+
                 if let TypeExpression::TypeIdentifier(span, name, type_args) = dexpr
                     && let Some(struct_info) = self.structs.get(name)
                 {
@@ -269,8 +378,15 @@ impl TypeChecker {
                     // Build substitution from type parameters to type arguments
                     let mut substitution = Substitution::empty();
                     let mut concrete_type_args = Vec::new();
-                    for ((_, param_name, _), arg) in type_parameters.iter().zip(type_args.iter()) {
-                        let arg_type = self.type_from_annotation(arg)?;
+                    for ((_, param_name, bound), arg) in
+                        type_parameters.iter().zip(type_args.iter())
+                    {
+                        let arg_type = match bound {
+                            Some(TypeParameterBound::Shape) => self.shape_from_annotation(arg)?,
+                            Some(TypeParameterBound::Dim) | None => {
+                                self.type_from_annotation(arg)?
+                            }
+                        };
                         concrete_type_args.push(arg_type.clone());
                         substitution.append(TypeVariable::new(param_name), arg_type);
                     }
@@ -317,6 +433,10 @@ impl TypeChecker {
             TypeAnnotation::Bool(_) => Ok(Type::Boolean),
             TypeAnnotation::String(_) => Ok(Type::String),
             TypeAnnotation::DateTime(_) => Ok(Type::DateTime),
+            TypeAnnotation::ShapeConstant(_, value) => Ok(Type::ShapeConstant(*value)),
+            TypeAnnotation::Array(_, element_type) => Ok(Type::Array(Box::new(
+                self.type_from_annotation(element_type)?,
+            ))),
             TypeAnnotation::Fn(_, param_types, return_type) => Ok(Type::Fn(
                 param_types
                     .iter()
@@ -324,9 +444,6 @@ impl TypeChecker {
                     .collect::<Result<Vec<_>>>()?,
                 Box::new(self.type_from_annotation(return_type)?),
             )),
-            TypeAnnotation::List(_, element_type) => Ok(Type::List(Box::new(
-                self.type_from_annotation(element_type)?,
-            ))),
         }
     }
 
@@ -373,8 +490,15 @@ impl TypeChecker {
                     TypeScheme::Quantified(_, _) => {
                         let qt = type_scheme.instantiate(&mut self.name_generator);
 
-                        for Bound::IsDim(t) in qt.bounds.iter() {
-                            self.constraints.add(Constraint::IsDType(t.clone())).ok();
+                        for bound in qt.bounds.iter() {
+                            match bound {
+                                Bound::IsDim(t) => {
+                                    self.constraints.add(Constraint::IsDType(t.clone())).ok();
+                                }
+                                Bound::IsShape(t) => {
+                                    self.constraints.add(Constraint::IsShape(t.clone())).ok();
+                                }
+                            }
                         }
                         qt.inner
                     }
@@ -396,8 +520,15 @@ impl TypeChecker {
 
                 let qt = type_scheme.instantiate(&mut self.name_generator);
 
-                for Bound::IsDim(t) in qt.bounds.iter() {
-                    self.constraints.add(Constraint::IsDType(t.clone())).ok();
+                for bound in qt.bounds.iter() {
+                    match bound {
+                        Bound::IsDim(t) => {
+                            self.constraints.add(Constraint::IsDType(t.clone())).ok();
+                        }
+                        Bound::IsShape(t) => {
+                            self.constraints.add(Constraint::IsShape(t.clone())).ok();
+                        }
+                    }
                 }
 
                 typed_ast::Expression::UnitIdentifier {
@@ -1065,13 +1196,20 @@ impl TypeChecker {
                             },
                         );
 
-                        // Add dtype constraints for type parameters with `Dim` bounds
+                        // Add kind constraints for type parameters
                         for ((_, _, bound), variable) in
                             type_parameters.iter().zip(variables.iter())
                         {
-                            if let Some(TypeParameterBound::Dim) = bound {
-                                self.add_dtype_constraint(&Type::TVar(variable.clone()))
-                                    .ok();
+                            match bound {
+                                Some(TypeParameterBound::Dim) => {
+                                    self.add_dtype_constraint(&Type::TVar(variable.clone()))
+                                        .ok();
+                                }
+                                Some(TypeParameterBound::Shape) => {
+                                    self.add_shape_constraint(&Type::TVar(variable.clone()))
+                                        .ok();
+                                }
+                                None => {}
                             }
                         }
 
@@ -1213,7 +1351,7 @@ impl TypeChecker {
                     field_type: TypeScheme::concrete(field_type),
                 }
             }
-            ast::Expression::List(span, elements) => {
+            ast::Expression::Array(span, elements) => {
                 let elements_checked = elements
                     .iter()
                     .map(|e| self.elaborate_expression(e))
@@ -1240,7 +1378,7 @@ impl TypeChecker {
                             .add_equal_constraint(&result_element_type, type_of_subsequent_element)
                             .is_trivially_violated()
                         {
-                            return Err(Box::new(TypeCheckError::IncompatibleTypesInList(
+                            return Err(Box::new(TypeCheckError::IncompatibleTypesInArray(
                                 elements_checked[0].full_span(),
                                 result_element_type.clone(),
                                 subsequent_element.full_span(),
@@ -1250,9 +1388,63 @@ impl TypeChecker {
                     }
                 }
 
-                typed_ast::Expression::List {
+                typed_ast::Expression::Array {
                     span: *span,
+                    shape: vec![elements_checked.len()],
                     elements: elements_checked,
+                    type_scheme: TypeScheme::concrete(result_element_type),
+                }
+            }
+            ast::Expression::Matrix(span, rows) => {
+                let rows_checked = rows
+                    .iter()
+                    .map(|row| {
+                        row.iter()
+                            .map(|e| self.elaborate_expression(e))
+                            .collect::<Result<Vec<_>>>()
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                if rows_checked.is_empty() {
+                    return Err(Box::new(TypeCheckError::EmptyMatrix(*span)));
+                }
+
+                let width = rows_checked[0].len();
+                if width == 0 {
+                    return Err(Box::new(TypeCheckError::EmptyMatrix(*span)));
+                }
+
+                for row in &rows_checked {
+                    if row.len() != width {
+                        return Err(Box::new(TypeCheckError::InconsistentMatrixRowLengths(
+                            *span,
+                        )));
+                    }
+                }
+
+                let element_types: Vec<Type> = rows_checked
+                    .iter()
+                    .flatten()
+                    .map(|expr| expr.get_type())
+                    .collect();
+
+                let result_element_type = if element_types[0].is_closed() {
+                    element_types[0].clone()
+                } else {
+                    let type_ = self.fresh_type_variable();
+                    self.add_equal_constraint(&element_types[0], &type_).ok();
+                    type_
+                };
+
+                for element_type in element_types.iter().skip(1) {
+                    self.add_equal_constraint(&result_element_type, element_type)
+                        .ok();
+                }
+
+                typed_ast::Expression::Array {
+                    span: *span,
+                    shape: vec![rows_checked.len(), width],
+                    elements: rows_checked.into_iter().flatten().collect(),
                     type_scheme: TypeScheme::concrete(result_element_type),
                 }
             }
@@ -1557,6 +1749,12 @@ impl TypeChecker {
                             ))
                             .ok();
                         }
+                        Some(TypeParameterBound::Shape) => {
+                            self.add_shape_constraint(&Type::TPar(
+                                type_parameter.to_compact_string(),
+                            ))
+                            .ok();
+                        }
                         None => {}
                     }
                 }
@@ -1768,6 +1966,72 @@ impl TypeChecker {
                     readable_return_type: crate::markup::empty(),
                 }
             }
+            ast::Statement::DefineTypeAlias {
+                keyword_span: _,
+                alias_name_span,
+                alias_name,
+                type_parameters,
+                aliased_type,
+            } => {
+                self.type_namespace
+                    .add_identifier(
+                        alias_name.to_compact_string(),
+                        *alias_name_span,
+                        CompactString::const_new("type alias"),
+                    )
+                    .map_err(|err| Box::new(err.into()))?;
+
+                let mut alias_typechecker = self.clone();
+                alias_typechecker.type_namespace.save();
+
+                for (span, type_parameter, bound) in type_parameters {
+                    if alias_typechecker
+                        .type_namespace
+                        .has_identifier(type_parameter)
+                    {
+                        return Err(Box::new(TypeCheckError::TypeParameterNameClash(
+                            *span,
+                            type_parameter.to_string(),
+                        )));
+                    }
+
+                    alias_typechecker
+                        .type_namespace
+                        .add_identifier(
+                            type_parameter.to_compact_string(),
+                            *span,
+                            CompactString::const_new("type parameter"),
+                        )
+                        .ok();
+
+                    alias_typechecker.registry.introduced_type_parameters.push((
+                        *span,
+                        type_parameter.to_compact_string(),
+                        bound.clone(),
+                    ));
+                }
+
+                let expanded_type = alias_typechecker.type_from_annotation(aliased_type)?;
+                self.type_aliases.insert(
+                    alias_name.to_compact_string(),
+                    TypeAliasInfo {
+                        type_parameters: type_parameters
+                            .iter()
+                            .map(|(span, name, bound)| (*span, (*name).into(), bound.clone()))
+                            .collect(),
+                        aliased_type: expanded_type,
+                    },
+                );
+
+                typed_ast::Statement::DefineTypeAlias {
+                    name: alias_name,
+                    type_parameters: type_parameters
+                        .iter()
+                        .map(|(_, name, bound)| (*name, bound.clone()))
+                        .collect(),
+                    aliased_type: aliased_type.clone(),
+                }
+            }
             ast::Statement::DefineDimension(name_span, name, dexprs) => {
                 self.type_namespace
                     .add_identifier(
@@ -1955,6 +2219,24 @@ impl TypeChecker {
                         .registry
                         .introduced_type_parameters
                         .push((*span, type_parameter.to_compact_string(), bound.clone()));
+
+                    match bound {
+                        Some(TypeParameterBound::Dim) => {
+                            typechecker_struct
+                                .add_dtype_constraint(&Type::TPar(
+                                    type_parameter.to_compact_string(),
+                                ))
+                                .ok();
+                        }
+                        Some(TypeParameterBound::Shape) => {
+                            typechecker_struct
+                                .add_shape_constraint(&Type::TPar(
+                                    type_parameter.to_compact_string(),
+                                ))
+                                .ok();
+                        }
+                        None => {}
+                    }
                 }
 
                 for (span, field, _) in fields {
@@ -2011,7 +2293,7 @@ impl TypeChecker {
         let mut elaborated_statement = self.elaborate_statement(statement)?;
 
         // Solve constraints
-        let (substitution, dtype_variables) =
+        let (substitution, dtype_variables, shape_variables) =
             self.constraints.solve().map_err(|inner| match inner {
                 ConstraintSolverError::CouldNotSolve(constraints) => {
                     TypeCheckError::ConstraintSolverError(statement.full_span(), constraints)
@@ -2045,7 +2327,7 @@ impl TypeChecker {
         // Make sure that the user-specified type parameter bounds are properly reflected:
         for (span, type_parameter, bound) in &self.registry.introduced_type_parameters {
             match bound {
-                Some(TypeParameterBound::Dim) => {
+                Some(TypeParameterBound::Dim) | Some(TypeParameterBound::Shape) => {
                     // The type parameter might be over-constrained, but that's okay
                 }
                 None => {
@@ -2056,6 +2338,12 @@ impl TypeChecker {
                         _ => false,
                     }) {
                         return Err(Box::new(TypeCheckError::MissingDimBound(*span)));
+                    }
+                    if shape_variables.iter().any(|tv| match tv {
+                        TypeVariable::Named(name) => name == type_parameter,
+                        _ => false,
+                    }) {
+                        return Err(Box::new(TypeCheckError::MissingShapeBound(*span)));
                     }
                 }
             }
@@ -2083,11 +2371,12 @@ impl TypeChecker {
             }
         }
 
-        elaborated_statement.generalize_types(&dtype_variables);
+        elaborated_statement.generalize_types(&dtype_variables, &shape_variables);
 
         elaborated_statement.update_readable_types(&self.registry);
 
-        self.env.generalize_types(&dtype_variables);
+        self.env
+            .generalize_types(&dtype_variables, &shape_variables);
 
         // Check if there is a typed hole in the statement
         if let Some((span, type_of_hole)) = elaborated_statement.find_typed_hole()? {

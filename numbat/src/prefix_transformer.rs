@@ -156,9 +156,16 @@ impl Transformer {
             Expression::AccessField { expr, .. } => {
                 self.transform_expression(expr);
             }
-            Expression::List(_, elements) => {
+            Expression::Array(_, elements) => {
                 for e in elements {
                     self.transform_expression(e);
+                }
+            }
+            Expression::Matrix(_, rows) => {
+                for row in rows {
+                    for e in row {
+                        self.transform_expression(e);
+                    }
                 }
             }
         }
@@ -231,7 +238,9 @@ impl Transformer {
 
     fn transform_statement(&mut self, statement: &mut Statement) -> Result<()> {
         match statement {
-            Statement::DefineStruct { .. } | Statement::ModuleImport(_, _) => {}
+            Statement::DefineStruct { .. }
+            | Statement::DefineTypeAlias { .. }
+            | Statement::ModuleImport(_, _) => {}
 
             Statement::Expression(expr) => {
                 self.transform_expression(expr);

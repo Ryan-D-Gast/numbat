@@ -30,8 +30,23 @@ const TEST_PRELUDE: &str = "
 
     fn atan2<T>(x: T, y: T) -> Scalar
 
-    fn len<T>(x: List<T>) -> Scalar
-    fn head<T>(x: List<T>) -> T
+    fn len<T>(x: Array<T>) -> Scalar
+    fn head<T>(x: Array<T>) -> T
+    fn range(start: Scalar, end: Scalar) -> Array<Scalar>
+    fn fill<T>(value: T, shape: Array<Scalar>) -> Array<T>
+    fn hcat<T>(xs1: Array<T>, xs2: Array<T>) -> Array<T>
+    fn map<T, U>(f: Fn[(T) -> U], xs: Array<T>) -> Array<U>
+    fn map2<T, U, V>(f: Fn[(T, U) -> V], other: T, xs: Array<U>) -> Array<V>
+    fn filter<T>(p: Fn[(T) -> Bool], xs: Array<T>) -> Array<T>
+    fn foldl<T, U>(f: Fn[(T, U) -> T], acc: T, xs: Array<U>) -> T
+    type Matrix<D: Dim, Rows: Shape, Cols: Shape> = Array<D>
+    type Vector<D: Dim, N: Shape> = Array<D>
+    fn transpose<D>(x: Array<D>) -> Array<D>
+    fn zeros(shape: Array<Scalar>) -> Array<Scalar>
+    fn ones(shape: Array<Scalar>) -> Array<Scalar>
+    fn eye(shape: Array<Scalar>) -> Array<Scalar>
+    fn identity(shape: Array<Scalar>) -> Array<Scalar> = eye(shape)
+    fn split(input: String, separator: String) -> Array<String>
 
     fn id<T>(x: T) -> T = x
     fn id_for_dim<T: Dim>(x: T) -> T = x

@@ -1,0 +1,29 @@
+use core::scalar
+
+type Matrix<D: Dim, Rows: Shape, Cols: Shape> = Array<D>
+
+type Vector<D: Dim, N: Shape> = Array<D>
+
+type RowVector<D: Dim, N: Shape> = Array<D>
+
+type SquareMatrix<D: Dim, N: Shape> = Array<D>
+
+@description("Transpose a matrix")
+@example("transpose([1, 2; 3, 4])")
+fn transpose<D>(xs: Array<D>) -> Array<D>
+
+@description("Create an array of zeros with the given shape")
+@example("zeros([2, 3])")
+fn zeros(shape: Array<Scalar>) -> Array<Scalar>
+
+@description("Create an array of ones with the given shape")
+@example("ones([2, 3])")
+fn ones(shape: Array<Scalar>) -> Array<Scalar>
+
+@description("Create an identity matrix")
+@example("eye([3, 3])")
+fn eye(shape: Array<Scalar>) -> Array<Scalar>
+
+@description("Create an identity matrix")
+@example("identity([3, 3])")
+fn identity(shape: Array<Scalar>) -> Array<Scalar> = eye(shape)

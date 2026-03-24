@@ -32,8 +32,8 @@ pub const KEYWORDS: &[&str] = &[
     "Bool",
     "String",
     "DateTime",
+    "Array",
     "Fn",
-    "List",
     // decorators
     "metric_prefixes",
     "binary_prefixes",

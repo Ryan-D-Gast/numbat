@@ -91,27 +91,27 @@ error: Found typed hole
   ┌─ <input:2>:1:49
   │
 1 │ fn seq(n) = if n == 1 then [1] else cons_end(n, ?)
-  │                                                 ^ List<Scalar>
+  │                                                 ^ Array<Scalar>
   │
-  = Found a hole of type 'List<Scalar>' in the statement:
-  =   fn seq(n: Scalar) -> List<Scalar> = if (n == 1) then [1] else cons_end(n, ?)
+  = Found a hole of type 'Array<Scalar>' in the statement:
+  =   fn seq(n: Scalar) -> Array<Scalar> = if (n == 1) then [1] else cons_end(n, ?)
 ```
 
 You can even use them to infer function types:
 
 ```nbt
-fn transform(xs: List<Scalar>) -> List<String> = map(?, xs)
+fn transform(xs: Array<Scalar>) -> Array<String> = map(?, xs)
 ```
 
-[:material-play-circle: Run this example](https://numbat.dev/?q=fn+transform(xs:+List%3CScalar%3E)+-%3E+List%3CString%3E+%3D+map(%3F,+xs))
+[:material-play-circle: Run this example](https://numbat.dev/?q=fn+transform(xs:+Array%3CScalar%3E)+-%3E+Array%3CString%3E+%3D+map(%3F,+xs))
 
 ```txt
 error: Found typed hole
   ┌─ <input:2>:1:54
   │
-1 │ fn transform(xs: List<Scalar>) -> List<String> = map(?, xs)
+1 │ fn transform(xs: Array<Scalar>) -> Array<String> = map(?, xs)
   │                                                      ^ Fn[(Scalar) -> String]
   │
   = Found a hole of type 'Fn[(Scalar) -> String]' in the statement:
-  =   fn transform(xs: List<Scalar>) -> List<String> = map(?, xs)
+  =   fn transform(xs: Array<Scalar>) -> Array<String> = map(?, xs)
 ```

@@ -358,10 +358,10 @@ fn parse<T: Dim>(input: String) -> T
 Returns the command-line arguments passed to the script. The first argument is the name of the script itself.
 
 ```nbt
-fn args() -> List<String>
+fn args() -> Array<String>
 ```
 
-!!! example "Get a list of all arguments except the script name."
+!!! example "Get an array of all arguments except the script name."
     ```nbt
     let xs = tail(args())
 
@@ -560,10 +560,10 @@ fn atanh(x: Scalar) -> Scalar
 Defined in: `math::statistics`
 
 ### `maximum` (Maximum)
-Get the largest element of a list.
+Get the largest element of a 1-D array.
 
 ```nbt
-fn maximum<D: Dim>(xs: List<D>) -> D
+fn maximum<D: Dim>(xs: Array<D>) -> D
 ```
 
 !!! example "Example"
@@ -575,10 +575,10 @@ fn maximum<D: Dim>(xs: List<D>) -> D
     [:material-play-circle: Run this example](https://numbat.dev/?q=maximum%28%5B30%20cm%2C%202%20m%5D%29){ .md-button }
 
 ### `minimum` (Minimum)
-Get the smallest element of a list.
+Get the smallest element of a 1-D array.
 
 ```nbt
-fn minimum<D: Dim>(xs: List<D>) -> D
+fn minimum<D: Dim>(xs: Array<D>) -> D
 ```
 
 !!! example "Example"
@@ -590,11 +590,11 @@ fn minimum<D: Dim>(xs: List<D>) -> D
     [:material-play-circle: Run this example](https://numbat.dev/?q=minimum%28%5B30%20cm%2C%202%20m%5D%29){ .md-button }
 
 ### `mean` (Arithmetic mean)
-Calculate the arithmetic mean of a list of quantities.
+Calculate the arithmetic mean of a 1-D array of quantities.
 More information [here](https://en.wikipedia.org/wiki/Arithmetic_mean).
 
 ```nbt
-fn mean<D: Dim>(xs: List<D>) -> D
+fn mean<D: Dim>(xs: Array<D>) -> D
 ```
 
 !!! example "Example"
@@ -606,11 +606,11 @@ fn mean<D: Dim>(xs: List<D>) -> D
     [:material-play-circle: Run this example](https://numbat.dev/?q=mean%28%5B1%20m%2C%202%20m%2C%20300%20cm%5D%29){ .md-button }
 
 ### `variance` (Variance)
-Calculate the population variance of a list of quantities.
+Calculate the population variance of a 1-D array of quantities.
 More information [here](https://en.wikipedia.org/wiki/Variance).
 
 ```nbt
-fn variance<D: Dim>(xs: List<D>) -> D^2
+fn variance<D: Dim>(xs: Array<D>) -> D^2
 ```
 
 !!! example "Example"
@@ -622,11 +622,11 @@ fn variance<D: Dim>(xs: List<D>) -> D^2
     [:material-play-circle: Run this example](https://numbat.dev/?q=variance%28%5B1%20m%2C%202%20m%2C%20300%20cm%5D%29){ .md-button }
 
 ### `stdev` (Standard deviation)
-Calculate the population standard deviation of a list of quantities.
+Calculate the population standard deviation of a 1-D array of quantities.
 More information [here](https://en.wikipedia.org/wiki/Standard_deviation).
 
 ```nbt
-fn stdev<D: Dim>(xs: List<D>) -> D
+fn stdev<D: Dim>(xs: Array<D>) -> D
 ```
 
 !!! example "Example"
@@ -638,11 +638,11 @@ fn stdev<D: Dim>(xs: List<D>) -> D
     [:material-play-circle: Run this example](https://numbat.dev/?q=stdev%28%5B1%20m%2C%202%20m%2C%20300%20cm%5D%29){ .md-button }
 
 ### `median` (Median)
-Calculate the median of a list of quantities.
+Calculate the median of a 1-D array of quantities.
 More information [here](https://en.wikipedia.org/wiki/Median).
 
 ```nbt
-fn median<D: Dim>(xs: List<D>) -> D
+fn median<D: Dim>(xs: Array<D>) -> D
 ```
 
 !!! example "Example"
@@ -1108,7 +1108,7 @@ Returns the solutions of the equation a x² + b x + c = 0.
 More information [here](https://en.wikipedia.org/wiki/Quadratic_equation).
 
 ```nbt
-fn quadratic_equation<A: Dim, B: Dim>(a: A, b: B, c: B^2 / A) -> List<B / A>
+fn quadratic_equation<A: Dim, B: Dim>(a: A, b: B, c: B^2 / A) -> Array<B / A>
 ```
 
 !!! example "Solve the equation \( 2x² -x -1 = 0 \)"
@@ -1116,7 +1116,7 @@ fn quadratic_equation<A: Dim, B: Dim>(a: A, b: B, c: B^2 / A) -> List<B / A>
     use extra::algebra
     quadratic_equation(2, -1, -1)
 
-        = [1, -0.5]    [List<Scalar>]
+        = [1, -0.5]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=use%20extra%3A%3Aalgebra%0Aquadratic%5Fequation%282%2C%20%2D1%2C%20%2D1%29){ .md-button }
 
@@ -1125,7 +1125,7 @@ Returns the solutions of the equation a x³ + b x² + c x + e = 0.
 More information [here](https://en.wikipedia.org/wiki/Cubic_equation).
 
 ```nbt
-fn cubic_equation(a: Scalar, b: Scalar, c: Scalar, e: Scalar) -> List<Scalar>
+fn cubic_equation(a: Scalar, b: Scalar, c: Scalar, e: Scalar) -> Array<Scalar>
 ```
 
 !!! example "Solve the equation \( x³ - 6x² + 11x - 6 = 0 \)"
@@ -1133,7 +1133,7 @@ fn cubic_equation(a: Scalar, b: Scalar, c: Scalar, e: Scalar) -> List<Scalar>
     use extra::algebra
     cubic_equation(1, -6, 11, -6)
 
-        = [1, 2, 3]    [List<Scalar>]
+        = [1, 2, 3]    [Array<Scalar>]
     ```
     [:material-play-circle: Run this example](https://numbat.dev/?q=use%20extra%3A%3Aalgebra%0Acubic%5Fequation%281%2C%20%2D6%2C%2011%2C%20%2D6%29){ .md-button }
 

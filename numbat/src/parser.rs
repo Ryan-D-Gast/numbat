@@ -3,13 +3,14 @@
 //! Grammar:
 //! ```txt
 //! prog            ::=   statement ((";" | "\n"+) statement)*
-//! statement       ::=   variable_decl | struct_decl | function_decl | dimension_decl | unit_decl | module_import | procedure_call | expression
+//! statement       ::=   variable_decl | struct_decl | function_decl | type_alias | dimension_decl | unit_decl | module_import | procedure_call | expression
 //!
 //! variable_decl   ::=   "let" identifier ( ":" type_annotation ) ? "=" expression
 //! struct_decl     ::=   "struct" identifier ( type_params ) ? "{" ( identifier ":" type_annotation "," )* ( identifier ":" type_annotation "," ? ) ? "}"
 //! function_decl   ::=   "fn" identifier ( type_params ) ? fn_decl_param ( "->" type_annotation ) ? ( "=" expression ) ?
+//! type_alias      ::=   "type" identifier ( type_params ) ? "=" type_annotation
 //! type_params     ::=   "<" ( type_param "," ) * type_param ">"
-//! type_param      ::=   identifier ( ":" "Dim" ) ?
+//! type_param      ::=   identifier ( ":" ( "Dim" | "Shape" ) ) ?
 //! fn_decl_param   ::=   "(" ( identifier ( ":" type_annotation ) ? "," )* ( identifier ( ":" type_annotation ) ) ? ")"
 //! dimension_decl  ::=   "dimension" identifier ( "=" dimension_expr ) *
 //! unit_decl       ::=   decorator * "unit" ( ":" dimension_expr ) ? ( "=" expression ) ?
@@ -18,7 +19,7 @@
 //!
 //! decorator       ::=   "@" ( "metric_prefixes" | "binary_prefixes" | ( "aliases(" list_of_aliases ")" ) )
 //!
-//! type_annotation ::=   "Bool" | "String" | "List<" type ">" | dimension_expr
+//! type_annotation ::=   "Bool" | "String" | "DateTime" | "Array<" type ">" | dimension_expr
 //! dimension_expr  ::=   dim_factor
 //! dim_factor      ::=   dim_power ( (multiply | divide) dim_power ) *
 //! dim_power       ::=   dim_primary ( power dim_exponent | unicode_exponent ) ?
@@ -45,7 +46,8 @@
 //! arguments       ::=   expression ( "," expression ) *
 //! primary         ::=   boolean | string | hex_number | oct_number | bin_number | number | identifier ( struct_expr ? ) | typed_hole | list_expr | "(" expression ")"
 //! struct_expr     ::=   "{" ( identifier ":" type_annotation "," )* ( identifier ":" expression "," ? ) ? "}"
-//! list_expr       ::=   "[]" | "[" expression ( "," expression ) * "]"
+//! list_expr       ::=   "[]" | "[" row ( ";" row )* "]"
+//! row             ::=   expression ( "," expression ) *
 //!
 //! number          ::=   [0-9][0-9_]*("." ([0-9][0-9_]*)?)?([eE][+-]?[0-9][0-9_]*)?
 //! hex_number      ::=   "0x" [0-9a-fA-F]*
@@ -88,7 +90,7 @@ pub enum ParseErrorKind {
     TokenizerError(TokenizerErrorKind),
 
     #[error(
-        "Expected one of: number, identifier, parenthesized expression, struct instantiation, list"
+        "Expected one of: number, identifier, parenthesized expression, struct instantiation, array"
     )]
     ExpectedPrimary,
 
@@ -229,14 +231,14 @@ pub enum ParseErrorKind {
     #[error("Expected {0} in function type")]
     ExpectedTokenInFunctionType(&'static str),
 
-    #[error("Expected {0} in list type")]
-    ExpectedTokenInListType(&'static str),
+    #[error("Expected {0} in array type")]
+    ExpectedTokenInArrayType(&'static str),
 
     #[error("Expected '{{' after struct name")]
     ExpectedLeftCurlyAfterStructName,
 
-    #[error("Expected ',' or ']' in list expression")]
-    ExpectedCommaOrRightBracketInList,
+    #[error("Expected ',' or ']' in array expression")]
+    ExpectedCommaOrRightBracketInArray,
 
     #[error("Unknown bound '{0}' in type parameter definition")]
     UnknownBound(String),
@@ -269,13 +271,6 @@ impl ParseError {
 
 type Result<T, E = ParseError> = std::result::Result<T, E>;
 type ParseResult<'a> = Result<Vec<Statement<'a>>, (Vec<Statement<'a>>, Vec<ParseError>)>;
-
-static PROCEDURES: &[TokenKind] = &[
-    TokenKind::ProcedurePrint,
-    TokenKind::ProcedureAssert,
-    TokenKind::ProcedureAssertEq,
-    TokenKind::ProcedureType,
-];
 
 struct Parser<'a> {
     current: usize,
@@ -438,6 +433,9 @@ impl<'a> Parser<'a> {
                     let bound = if self.match_exact(tokens, TokenKind::Colon).is_some() {
                         match self.match_exact(tokens, TokenKind::Identifier) {
                             Some(token) if token.lexeme == "Dim" => Some(TypeParameterBound::Dim),
+                            Some(token) if token.lexeme == "Shape" => {
+                                Some(TypeParameterBound::Shape)
+                            }
                             Some(token) => {
                                 return Err(ParseError {
                                     kind: ParseErrorKind::UnknownBound(token.lexeme.into()),
@@ -496,6 +494,12 @@ impl<'a> Parser<'a> {
                 .map(Statement::DefineVariable)
         } else if let Some(fn_token) = self.match_exact(tokens, TokenKind::Fn) {
             self.parse_function_declaration(tokens, fn_token.span)
+        } else if self.match_exact(tokens, TokenKind::ProcedureType).is_some() {
+            if self.peek(tokens).kind == TokenKind::LeftParen {
+                self.parse_procedure(tokens)
+            } else {
+                self.parse_type_alias(tokens)
+            }
         } else if self.match_exact(tokens, TokenKind::Dimension).is_some() {
             self.parse_dimension_declaration(tokens)
         } else if self.match_exact(tokens, TokenKind::At).is_some() {
@@ -506,11 +510,50 @@ impl<'a> Parser<'a> {
             self.parse_use(tokens)
         } else if self.match_exact(tokens, TokenKind::Struct).is_some() {
             self.parse_struct(tokens)
-        } else if self.match_any(tokens, PROCEDURES).is_some() {
+        } else if self
+            .match_any(
+                tokens,
+                &[
+                    TokenKind::ProcedurePrint,
+                    TokenKind::ProcedureAssert,
+                    TokenKind::ProcedureAssertEq,
+                ],
+            )
+            .is_some()
+        {
             self.parse_procedure(tokens)
         } else {
             Ok(Statement::Expression(self.expression(tokens)?))
         }
+    }
+
+    fn parse_type_alias(&mut self, tokens: &[Token<'a>]) -> Result<Statement<'a>> {
+        let keyword_span = self.last(tokens).unwrap().span;
+        let Some(alias_name) = self.match_exact(tokens, TokenKind::Identifier) else {
+            return Err(ParseError {
+                kind: ParseErrorKind::ExpectedIdentifier,
+                span: self.peek(tokens).span,
+            });
+        };
+
+        let type_parameters = self.type_parameters(tokens)?;
+
+        if self.match_exact(tokens, TokenKind::Equal).is_none() {
+            return Err(ParseError {
+                kind: ParseErrorKind::TrailingCharacters(self.peek(tokens).lexeme.to_owned()),
+                span: self.peek(tokens).span,
+            });
+        }
+
+        let aliased_type = self.type_annotation(tokens)?;
+
+        Ok(Statement::DefineTypeAlias {
+            keyword_span,
+            alias_name_span: alias_name.span,
+            alias_name: alias_name.lexeme,
+            type_parameters,
+            aliased_type,
+        })
     }
 
     fn parse_variable(
@@ -1526,28 +1569,51 @@ impl<'a> Parser<'a> {
             let span = self.last(tokens).unwrap().span;
             self.skip_empty_lines(tokens);
 
-            let mut elements = vec![];
-            while self.match_exact(tokens, TokenKind::RightBracket).is_none() {
-                self.skip_empty_lines(tokens);
-
-                elements.push(self.expression(tokens)?);
-
-                self.skip_empty_lines(tokens);
-
-                if self.match_exact(tokens, TokenKind::Comma).is_none()
-                    && self.peek(tokens).kind != TokenKind::RightBracket
-                {
-                    return Err(ParseError {
-                        kind: ParseErrorKind::ExpectedCommaOrRightBracketInList,
-                        span: self.peek(tokens).span,
-                    });
-                }
-
-                self.skip_empty_lines(tokens);
+            if self.match_exact(tokens, TokenKind::RightBracket).is_some() {
+                return Ok(Expression::Array(
+                    span.extend(&self.last(tokens).unwrap().span),
+                    vec![],
+                ));
             }
-            let span = span.extend(&self.last(tokens).unwrap().span);
 
-            Ok(Expression::List(span, elements))
+            let first_row = self.expression_row(tokens)?;
+            self.skip_empty_lines(tokens);
+
+            if self.match_exact(tokens, TokenKind::Semicolon).is_some() {
+                let mut rows = vec![first_row];
+                loop {
+                    self.skip_empty_lines(tokens);
+
+                    if self.match_exact(tokens, TokenKind::RightBracket).is_some() {
+                        break;
+                    }
+
+                    rows.push(self.expression_row(tokens)?);
+                    self.skip_empty_lines(tokens);
+
+                    if self.match_exact(tokens, TokenKind::RightBracket).is_some() {
+                        break;
+                    }
+
+                    if self.match_exact(tokens, TokenKind::Semicolon).is_none() {
+                        return Err(ParseError {
+                            kind: ParseErrorKind::ExpectedCommaOrRightBracketInArray,
+                            span: self.peek(tokens).span,
+                        });
+                    }
+                }
+                let span = span.extend(&self.last(tokens).unwrap().span);
+                Ok(Expression::Matrix(span, rows))
+            } else if self.match_exact(tokens, TokenKind::RightBracket).is_some() {
+                let span = span.extend(&self.last(tokens).unwrap().span);
+
+                Ok(Expression::Array(span, first_row))
+            } else {
+                Err(ParseError {
+                    kind: ParseErrorKind::ExpectedCommaOrRightBracketInArray,
+                    span: self.peek(tokens).span,
+                })
+            }
         } else if self.match_exact(tokens, TokenKind::QuestionMark).is_some() {
             let span = self.last(tokens).unwrap().span;
             Ok(Expression::TypedHole(span))
@@ -1747,6 +1813,27 @@ impl<'a> Parser<'a> {
             Ok(TypeAnnotation::String(token.span))
         } else if let Some(token) = self.match_exact(tokens, TokenKind::DateTime) {
             Ok(TypeAnnotation::DateTime(token.span))
+        } else if self.match_exact(tokens, TokenKind::Array).is_some() {
+            let span = self.last(tokens).unwrap().span;
+
+            if self.match_exact(tokens, TokenKind::LessThan).is_none() {
+                return Err(ParseError::new(
+                    ParseErrorKind::ExpectedTokenInArrayType("'<'"),
+                    self.peek(tokens).span,
+                ));
+            }
+
+            let element_type = self.type_annotation(tokens)?;
+
+            if !self.match_closing_angle_bracket(tokens) {
+                return Err(ParseError::new(
+                    ParseErrorKind::ExpectedTokenInArrayType("'>'"),
+                    self.peek(tokens).span,
+                ));
+            }
+
+            let span = span.extend(&self.last(tokens).unwrap().span);
+            Ok(TypeAnnotation::Array(span, Box::new(element_type)))
         } else if self.match_exact(tokens, TokenKind::CapitalFn).is_some() {
             let span = self.last(tokens).unwrap().span;
             if self.match_exact(tokens, TokenKind::LeftBracket).is_none() {
@@ -1796,33 +1883,43 @@ impl<'a> Parser<'a> {
             let span = span.extend(&self.last(tokens).unwrap().span);
 
             Ok(TypeAnnotation::Fn(span, params, Box::new(return_type)))
-        } else if self.match_exact(tokens, TokenKind::List).is_some() {
-            let span = self.last(tokens).unwrap().span;
-
-            if self.match_exact(tokens, TokenKind::LessThan).is_none() {
-                return Err(ParseError::new(
-                    ParseErrorKind::ExpectedTokenInListType("'<'"),
-                    self.peek(tokens).span,
-                ));
-            }
-
-            let element_type = self.type_annotation(tokens)?;
-
-            if !self.match_closing_angle_bracket(tokens) {
-                return Err(ParseError::new(
-                    ParseErrorKind::ExpectedTokenInListType("'>'"),
-                    self.peek(tokens).span,
-                ));
-            }
-
-            let span = span.extend(&self.last(tokens).unwrap().span);
-
-            Ok(TypeAnnotation::List(span, Box::new(element_type)))
         } else {
             Ok(TypeAnnotation::TypeExpression(
                 self.dimension_expression(tokens)?,
             ))
         }
+    }
+
+    fn generic_type_argument(&mut self, tokens: &[Token<'a>]) -> Result<TypeAnnotation> {
+        if self.peek(tokens).kind == TokenKind::Number
+            && Self::is_plain_integer(self.peek(tokens).lexeme)
+        {
+            let token = self.match_exact(tokens, TokenKind::Number).unwrap();
+            let value = token.lexeme.replace('_', "").parse().unwrap();
+            Ok(TypeAnnotation::ShapeConstant(token.span, value))
+        } else {
+            self.type_annotation(tokens)
+        }
+    }
+
+    fn expression_row(&mut self, tokens: &[Token<'a>]) -> Result<Vec<Expression<'a>>> {
+        let mut elements = vec![self.expression(tokens)?];
+        self.skip_empty_lines(tokens);
+
+        while self.match_exact(tokens, TokenKind::Comma).is_some() {
+            self.skip_empty_lines(tokens);
+            if matches!(
+                self.peek(tokens).kind,
+                TokenKind::RightBracket | TokenKind::Semicolon
+            ) {
+                break;
+            }
+
+            elements.push(self.expression(tokens)?);
+            self.skip_empty_lines(tokens);
+        }
+
+        Ok(elements)
     }
 
     fn dimension_expression(&mut self, tokens: &[Token<'a>]) -> Result<TypeExpression> {
@@ -1955,9 +2052,9 @@ impl<'a> Parser<'a> {
             if self.match_exact(tokens, TokenKind::LessThan).is_some() {
                 let mut type_args = vec![];
                 if !self.peek_closing_angle_bracket(tokens) {
-                    type_args.push(self.type_annotation(tokens)?);
+                    type_args.push(self.generic_type_argument(tokens)?);
                     while self.match_exact(tokens, TokenKind::Comma).is_some() {
-                        type_args.push(self.type_annotation(tokens)?);
+                        type_args.push(self.generic_type_argument(tokens)?);
                     }
                 }
                 if !self.match_closing_angle_bracket(tokens) {
@@ -1990,6 +2087,10 @@ impl<'a> Parser<'a> {
         } else {
             e
         }
+    }
+
+    fn is_plain_integer(lexeme: &str) -> bool {
+        !lexeme.contains(['.', 'e', 'E'])
     }
 
     fn match_exact<'b>(
@@ -2185,8 +2286,8 @@ mod tests {
     use super::*;
     use crate::{
         ast::{
-            ReplaceSpans, binop, boolean, conditional, factorial, identifier, list, logical_neg,
-            negate, scalar, struct_,
+            ReplaceSpans, array, binop, boolean, conditional, factorial, identifier, logical_neg,
+            matrix, negate, scalar, struct_,
         },
         span::ByteIndex,
     };
@@ -3289,6 +3390,11 @@ mod tests {
         );
 
         parse_as(
+            &["type(2)"],
+            Statement::ProcedureCall(Span::dummy(), ProcedureKind::Type, vec![scalar!(2.0)]),
+        );
+
+        parse_as(
             &["print(2, 3, 4)"],
             Statement::ProcedureCall(
                 Span::dummy(),
@@ -3712,31 +3818,58 @@ mod tests {
     }
 
     #[test]
-    fn lists() {
-        parse_as_expression(&["[]"], list!());
-        parse_as_expression(&["[1]", "[1,]"], list!(scalar!(1.0)));
-        parse_as_expression(&["[1, 2]", "[1, 2, ]"], list!(scalar!(1.0), scalar!(2.0)));
+    fn type_aliases() {
+        parse_as(
+            &["type Matrix<D: Dim, Rows: Shape, Cols: Shape> = Array<D>"],
+            Statement::DefineTypeAlias {
+                keyword_span: Span::dummy(),
+                alias_name_span: Span::dummy(),
+                alias_name: "Matrix",
+                type_parameters: vec![
+                    (Span::dummy(), "D", Some(TypeParameterBound::Dim)),
+                    (Span::dummy(), "Rows", Some(TypeParameterBound::Shape)),
+                    (Span::dummy(), "Cols", Some(TypeParameterBound::Shape)),
+                ],
+                aliased_type: TypeAnnotation::Array(
+                    Span::dummy(),
+                    Box::new(TypeAnnotation::TypeExpression(
+                        TypeExpression::TypeIdentifier(
+                            Span::dummy(),
+                            CompactString::const_new("D"),
+                            vec![],
+                        ),
+                    )),
+                ),
+            },
+        );
+    }
 
-        parse_as_expression(&["[\n]"], list!());
-        parse_as_expression(&["[1\n]", "[1,\n]"], list!(scalar!(1.0)));
+    #[test]
+    fn arrays() {
+        parse_as_expression(&["[]"], array!());
+        parse_as_expression(&["[1]", "[1,]"], array!(scalar!(1.0)));
+        parse_as_expression(&["[1, 2]", "[1, 2, ]"], array!(scalar!(1.0), scalar!(2.0)));
+
+        parse_as_expression(&["[\n]"], array!());
+        parse_as_expression(&["[1\n]", "[1,\n]"], array!(scalar!(1.0)));
         parse_as_expression(
             &["[1\n,2\n]", "[1,\n2,\n]"],
-            list!(scalar!(1.0), scalar!(2.0)),
+            array!(scalar!(1.0), scalar!(2.0)),
         );
 
         parse_as_expression(
             &["[[1,2], [3]]"],
-            list!(list!(scalar!(1.0), scalar!(2.0)), list!(scalar!(3.0))),
+            array!(array!(scalar!(1.0), scalar!(2.0)), array!(scalar!(3.0))),
         );
 
         parse_as_expression(
             &["[[1,\n2\n],\n [3\n]\n]"],
-            list!(list!(scalar!(1.0), scalar!(2.0)), list!(scalar!(3.0))),
+            array!(array!(scalar!(1.0), scalar!(2.0)), array!(scalar!(3.0))),
         );
 
         should_fail_with(
             &["[1", "[1, 2, 3", "[1, 2)"],
-            ParseErrorKind::ExpectedCommaOrRightBracketInList,
+            ParseErrorKind::ExpectedCommaOrRightBracketInArray,
         );
         should_fail_with(&["[1, 2, ,"], ParseErrorKind::ExpectedPrimary);
         should_fail_with(
@@ -3746,9 +3879,22 @@ mod tests {
 
         should_fail_with(
             &["[1\n", "[1,\n 2,\n 3\n", "[1,\n 2\n)"],
-            ParseErrorKind::ExpectedCommaOrRightBracketInList,
+            ParseErrorKind::ExpectedCommaOrRightBracketInArray,
         );
         should_fail_with(&["[1,\n2,\n,\n"], ParseErrorKind::ExpectedPrimary);
+    }
+
+    #[test]
+    fn matrices() {
+        parse_as_expression(&["[1; 2]"], matrix!([scalar!(1.0)], [scalar!(2.0)]));
+        parse_as_expression(
+            &["[1, 2; 3, 4]", "[1, 2,; 3, 4, ]"],
+            matrix!([scalar!(1.0), scalar!(2.0)], [scalar!(3.0), scalar!(4.0)]),
+        );
+        parse_as_expression(
+            &["[\n1,\n2;\n3,\n4\n]"],
+            matrix!([scalar!(1.0), scalar!(2.0)], [scalar!(3.0), scalar!(4.0)]),
+        );
     }
 
     #[test]
@@ -3760,7 +3906,7 @@ mod tests {
         Successfully parsed:
         Expression(BinaryOperator { op: Add, lhs: Scalar(Span { start: ByteIndex(17), end: ByteIndex(18), code_source_id: 0 }, Number(2.0)), rhs: Scalar(Span { start: ByteIndex(21), end: ByteIndex(22), code_source_id: 0 }, Number(3.0)), span_op: Some(Span { start: ByteIndex(19), end: ByteIndex(20), code_source_id: 0 }) })
         Errors encountered:
-        Expected one of: number, identifier, parenthesized expression, struct instantiation, list - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(4), end: ByteIndex(5), code_source_id: 0 } }
+        Expected one of: number, identifier, parenthesized expression, struct instantiation, array - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(4), end: ByteIndex(5), code_source_id: 0 } }
         "###);
         // error in the middle of something
         assert_snapshot!(snap_parse(
@@ -3774,7 +3920,7 @@ mod tests {
         ProcedureCall(Span { start: ByteIndex(68), end: ByteIndex(96), code_source_id: 0 }, AssertEq, [BinaryOperator { op: Equal, lhs: BinaryOperator { op: Add, lhs: Identifier(Span { start: ByteIndex(78), end: ByteIndex(82), code_source_id: 0 }, "tamo"), rhs: Identifier(Span { start: ByteIndex(85), end: ByteIndex(89), code_source_id: 0 }, "cool"), span_op: Some(Span { start: ByteIndex(83), end: ByteIndex(84), code_source_id: 0 }) }, rhs: Scalar(Span { start: ByteIndex(93), end: ByteIndex(95), code_source_id: 0 }, Number(80.0)), span_op: Some(Span { start: ByteIndex(90), end: ByteIndex(92), code_source_id: 0 }) }])
         Expression(BinaryOperator { op: Mul, lhs: Scalar(Span { start: ByteIndex(109), end: ByteIndex(111), code_source_id: 0 }, Number(30.0)), rhs: Identifier(Span { start: ByteIndex(111), end: ByteIndex(112), code_source_id: 0 }, "m"), span_op: None })
         Errors encountered:
-        Expected one of: number, identifier, parenthesized expression, struct instantiation, list - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(50), end: ByteIndex(51), code_source_id: 0 } }
+        Expected one of: number, identifier, parenthesized expression, struct instantiation, array - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(50), end: ByteIndex(51), code_source_id: 0 } }
         "#);
         // error on a multiline let
         assert_snapshot!(snap_parse(
@@ -3784,7 +3930,7 @@ mod tests {
             "), @r###"
         Successfully parsed:
         Errors encountered:
-        Expected one of: number, identifier, parenthesized expression, struct instantiation, list - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(40), end: ByteIndex(41), code_source_id: 0 } }
+        Expected one of: number, identifier, parenthesized expression, struct instantiation, array - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(40), end: ByteIndex(41), code_source_id: 0 } }
         "###);
         // error on a multiline if
         assert_snapshot!(snap_parse(
@@ -3796,8 +3942,8 @@ mod tests {
         Successfully parsed:
         Errors encountered:
         Expected 'then' in if-then-else condition - ParseError { kind: ExpectedThen, span: Span { start: ByteIndex(18), end: ByteIndex(19), code_source_id: 0 } }
-        Expected one of: number, identifier, parenthesized expression, struct instantiation, list - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(36), end: ByteIndex(40), code_source_id: 0 } }
-        Expected one of: number, identifier, parenthesized expression, struct instantiation, list - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(63), end: ByteIndex(67), code_source_id: 0 } }
+        Expected one of: number, identifier, parenthesized expression, struct instantiation, array - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(36), end: ByteIndex(40), code_source_id: 0 } }
+        Expected one of: number, identifier, parenthesized expression, struct instantiation, array - ParseError { kind: ExpectedPrimary, span: Span { start: ByteIndex(63), end: ByteIndex(67), code_source_id: 0 } }
         "###);
 
         // #260

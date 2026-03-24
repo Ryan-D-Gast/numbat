@@ -15,7 +15,7 @@ use compact_str::CompactString;
 use super::Args;
 use super::FfiContext;
 use super::Result;
-use crate::value::Value;
+use crate::value::{ArrayValue, Value};
 
 #[cfg(feature = "plotting")]
 fn line_plot(mut args: Args) -> Result<Plot, Box<RuntimeErrorKind>> {
@@ -25,14 +25,14 @@ fn line_plot(mut args: Args) -> Result<Plot, Box<RuntimeErrorKind>> {
     let y_label = fields.pop().unwrap().unsafe_as_string();
     let x_label = fields.pop().unwrap().unsafe_as_string();
 
-    let xs = xs.unsafe_as_list();
-    let ys = ys.unsafe_as_list();
+    let xs = xs.unsafe_as_array();
+    let ys = ys.unsafe_as_array();
 
-    let get_unit = |list: &crate::list::NumbatList<Value>| {
-        list.iter()
-            .next()
-            .map(|v| v.clone().unsafe_as_quantity().unit().clone())
-            .ok_or_else(|| Box::new(RuntimeErrorKind::UserError("Cannot plot empty data".into())))
+    let get_unit = |array: &ArrayValue| {
+        array
+            .element_at(0)
+            .map(|v| v.unsafe_as_quantity().unit().clone())
+            .map_err(|_| Box::new(RuntimeErrorKind::UserError("Cannot plot empty data".into())))
     };
     let x_unit = get_unit(&xs)?;
     let y_unit = get_unit(&ys)?;
@@ -55,13 +55,13 @@ fn line_plot(mut args: Args) -> Result<Plot, Box<RuntimeErrorKind>> {
     );
 
     let xs = xs
-        .iter()
-        .cloned()
+        .vector_values()?
+        .into_iter()
         .map(|e| e.unsafe_as_quantity().unsafe_value().to_f64())
         .collect::<Vec<_>>();
     let ys = ys
-        .iter()
-        .cloned()
+        .vector_values()?
+        .into_iter()
         .map(|e| e.unsafe_as_quantity().unsafe_value().to_f64())
         .collect::<Vec<_>>();
 
@@ -76,22 +76,21 @@ fn bar_chart(mut args: Args) -> Result<Plot, Box<RuntimeErrorKind>> {
     let value_label = fields.pop().unwrap().unsafe_as_string();
 
     let x_labels = x_labels
-        .unsafe_as_list()
-        .iter()
-        .cloned()
+        .unsafe_as_array()
+        .vector_values()?
+        .into_iter()
         .map(|e| e.unsafe_as_string())
         .collect::<Vec<_>>();
 
-    let values = values.unsafe_as_list();
+    let values = values.unsafe_as_array();
     let value_unit = values
-        .iter()
-        .next()
-        .map(|v| v.clone().unsafe_as_quantity().unit().clone())
-        .ok_or_else(|| Box::new(RuntimeErrorKind::UserError("Cannot plot empty data".into())))?;
+        .element_at(0)
+        .map(|v| v.unsafe_as_quantity().unit().clone())
+        .map_err(|_| Box::new(RuntimeErrorKind::UserError("Cannot plot empty data".into())))?;
 
     let values = values
-        .iter()
-        .cloned()
+        .vector_values()?
+        .into_iter()
         .map(|e| e.unsafe_as_quantity().unsafe_value().to_f64())
         .collect::<Vec<_>>();
 

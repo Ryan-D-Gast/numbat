@@ -7,7 +7,6 @@ use indexmap::IndexMap;
 use num_traits::ToPrimitive;
 
 use crate::interpreter::RuntimeErrorKind;
-use crate::list::NumbatList;
 use crate::prefix_transformer::Transformer;
 use crate::span::Span;
 use crate::typechecker::TypeChecker;
@@ -24,7 +23,7 @@ use crate::{
     quantity::{Quantity, QuantityError},
     unit::Unit,
     unit_registry::{UnitMetadata, UnitRegistry},
-    value::{FunctionReference, Value},
+    value::{ArrayValue, FunctionReference, Value},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,8 +118,8 @@ pub enum Op {
     /// Access a single field of a struct
     AccessStructField,
 
-    /// Build a list from the elements on the stack
-    BuildList,
+    /// Build an array with explicit shape from the elements on the stack
+    BuildArray,
 
     /// Return from the current function
     Return,
@@ -129,7 +128,7 @@ pub enum Op {
 impl Op {
     fn num_operands(self) -> usize {
         match self {
-            Op::FFICallProcedure => 3,
+            Op::FFICallProcedure | Op::BuildArray => 3,
             Op::SetUnitConstant | Op::Call | Op::FFICallFunction | Op::BuildStructInstance => 2,
             Op::LoadConstant
             | Op::ApplyPrefix
@@ -140,8 +139,7 @@ impl Op {
             | Op::JumpIfFalse
             | Op::Jump
             | Op::CallCallable
-            | Op::AccessStructField
-            | Op::BuildList => 1,
+            | Op::AccessStructField => 1,
             Op::Negate
             | Op::Factorial
             | Op::Add
@@ -206,7 +204,7 @@ impl Op {
             Op::Return => "Return",
             Op::BuildStructInstance => "BuildStructInstance",
             Op::AccessStructField => "AccessStructField",
-            Op::BuildList => "BuildList",
+            Op::BuildArray => "BuildArray",
         }
     }
 }
@@ -521,6 +519,101 @@ impl Vm {
         let position = self.ffi_callables.get_index_of(name)?;
         assert!(position <= u16::MAX as usize);
         Some(position as u16)
+    }
+
+    fn collect_ffi_args(&mut self, num_args: usize, ffi_call_args: &FfiCallArgs) -> VecDeque<Arg> {
+        let mut args = VecDeque::new();
+        for i in 0..num_args {
+            let call_arg = &ffi_call_args.args[num_args - 1 - i];
+            args.push_front(Arg {
+                value: self.pop(),
+                type_: call_arg.type_.clone(),
+                span: call_arg.span,
+            });
+        }
+        args
+    }
+
+    fn call_foreign_function(
+        &mut self,
+        ctx: &mut ExecutionContext,
+        function_idx: usize,
+        args: VecDeque<Arg>,
+        return_type: &TypeScheme,
+    ) -> std::result::Result<Value, Box<RuntimeErrorKind>> {
+        let callable = self.ffi_callables[function_idx].callable;
+
+        match callable {
+            Callable::Function(function) => {
+                let mut ffi_ctx = ffi::FfiContext::new(ctx, self);
+                function(&mut ffi_ctx, args, return_type)
+            }
+            Callable::Procedure(..) => unreachable!("procedures can not return a value"),
+        }
+    }
+
+    pub(crate) fn invoke_callable(
+        &mut self,
+        ctx: &mut ExecutionContext,
+        callable: Value,
+        args: VecDeque<Arg>,
+        return_type: &TypeScheme,
+    ) -> std::result::Result<Value, Box<RuntimeErrorKind>> {
+        match callable.unsafe_as_function_reference() {
+            FunctionReference::Normal(name) => {
+                let function_idx = self.get_function_idx(&name) as usize;
+                let caller_frame_idx = self.frames.len() - 1;
+                let saved_ip = self.frames[caller_frame_idx].ip;
+                let caller_function_idx = self.frames[caller_frame_idx].function_idx;
+                let caller_chunk_end = self.bytecode[caller_function_idx].1.len();
+                let saved_stack_len = self.stack.len();
+                let saved_frames_len = self.frames.len();
+
+                self.frames[caller_frame_idx].ip = caller_chunk_end;
+
+                for arg in args {
+                    self.push(arg.value);
+                }
+
+                self.frames.push(CallFrame {
+                    function_idx,
+                    ip: 0,
+                    fp: saved_stack_len,
+                });
+
+                let result = match self.run_without_cleanup(ctx) {
+                    Ok(_) => Ok(self.pop()),
+                    Err(error) => {
+                        self.stack.truncate(saved_stack_len);
+                        self.frames.truncate(saved_frames_len);
+                        Err(Box::new(error.kind))
+                    }
+                };
+
+                self.frames[caller_frame_idx].ip = saved_ip;
+                result
+            }
+            FunctionReference::Foreign(name) => {
+                let function_idx = self
+                    .get_ffi_callable_idx(&name)
+                    .expect("Foreign function exists") as usize;
+                self.call_foreign_function(ctx, function_idx, args, return_type)
+            }
+            FunctionReference::TzConversion(tz_name) => {
+                let dt = args
+                    .into_iter()
+                    .next()
+                    .expect("timezone conversion needs one argument")
+                    .value
+                    .unsafe_as_datetime();
+
+                let tz = jiff::tz::TimeZone::get(&tz_name).map_err(|_| {
+                    Box::new(RuntimeErrorKind::UnknownTimezone(tz_name.to_string()))
+                })?;
+
+                Ok(Value::DateTime(dt.with_time_zone(tz)))
+            }
+        }
     }
 
     /// Simplify a quantity using the unit registry and constants.
@@ -929,20 +1022,12 @@ impl Vm {
                     let function_idx = self.read_u16() as usize;
                     let num_args = self.read_u16() as usize;
                     let call_args_idx = self.read_u16() as usize;
-                    let foreign_function = &self.ffi_callables[function_idx];
+                    let arity = self.ffi_callables[function_idx].arity.clone();
 
-                    debug_assert!(foreign_function.arity.contains(&num_args));
+                    debug_assert!(arity.contains(&num_args));
 
                     let ffi_call_args = self.ffi_call_args[call_args_idx].clone();
-                    let mut args = VecDeque::new();
-                    for i in 0..num_args {
-                        let call_arg = &ffi_call_args.args[num_args - 1 - i];
-                        args.push_front(Arg {
-                            value: self.pop(),
-                            type_: call_arg.type_.clone(),
-                            span: call_arg.span,
-                        });
-                    }
+                    let mut args = self.collect_ffi_args(num_args, &ffi_call_args);
 
                     // For the print procedure, simplify quantity arguments before printing
                     let (proc_name, _) = self.ffi_callables.get_index(function_idx).unwrap();
@@ -956,13 +1041,13 @@ impl Vm {
                         }
                     }
 
-                    match &self.ffi_callables[function_idx].callable {
+                    match self.ffi_callables[function_idx].callable {
                         Callable::Function(function) => {
                             let return_type = ffi_call_args
                                 .return_type
                                 .as_ref()
                                 .expect("FFI functions must have a return type");
-                            let mut ffi_ctx = ffi::FfiContext::new(ctx, &self.constants);
+                            let mut ffi_ctx = ffi::FfiContext::new(ctx, self);
                             let result = (function)(&mut ffi_ctx, args, return_type)
                                 .map_err(|e| self.runtime_error(*e))?;
                             self.push(result);
@@ -984,66 +1069,17 @@ impl Vm {
                     let call_args_idx = self.read_u16() as usize;
 
                     let callable = self.pop();
-                    match callable.unsafe_as_function_reference() {
-                        FunctionReference::Normal(ref name) => {
-                            let function_idx = self.get_function_idx(name) as usize;
+                    let ffi_call_args = self.ffi_call_args[call_args_idx].clone();
+                    let args = self.collect_ffi_args(num_args, &ffi_call_args);
+                    let return_type = ffi_call_args
+                        .return_type
+                        .as_ref()
+                        .expect("Callable calls must have a return type");
 
-                            // TODO: unify code with 'Op::Call'?
-                            self.frames.push(CallFrame {
-                                function_idx,
-                                ip: 0,
-                                fp: self.stack.len() - num_args,
-                            })
-                        }
-                        FunctionReference::Foreign(ref name) => {
-                            let function_idx = self
-                                .get_ffi_callable_idx(name)
-                                .expect("Foreign function exists")
-                                as usize;
-
-                            let ffi_call_args = self.ffi_call_args[call_args_idx].clone();
-                            let mut args = VecDeque::new();
-                            for i in 0..num_args {
-                                let call_arg = &ffi_call_args.args[num_args - 1 - i];
-                                args.push_front(Arg {
-                                    value: self.pop(),
-                                    type_: call_arg.type_.clone(),
-                                    span: call_arg.span,
-                                });
-                            }
-
-                            match &self.ffi_callables[function_idx].callable {
-                                Callable::Function(function) => {
-                                    let return_type = ffi_call_args
-                                        .return_type
-                                        .as_ref()
-                                        .expect("FFI functions must have a return type");
-                                    let mut ffi_ctx = ffi::FfiContext::new(ctx, &self.constants);
-                                    let result = (function)(&mut ffi_ctx, args, return_type)
-                                        .map_err(|e| self.runtime_error(*e))?;
-                                    self.push(result);
-                                }
-                                Callable::Procedure(..) => unreachable!(
-                                    "Foreign procedures can not be targeted by a function reference"
-                                ),
-                            }
-                        }
-                        FunctionReference::TzConversion(tz_name) => {
-                            // TODO: implement this using a closure, once we have that in the language
-
-                            let dt = self.pop_datetime();
-
-                            let tz = jiff::tz::TimeZone::get(&tz_name).map_err(|_| {
-                                self.runtime_error(RuntimeErrorKind::UnknownTimezone(
-                                    tz_name.to_string(),
-                                ))
-                            })?;
-
-                            let dt = dt.with_time_zone(tz);
-
-                            self.push(Value::DateTime(dt));
-                        }
-                    }
+                    let result = self
+                        .invoke_callable(ctx, callable, args, return_type)
+                        .map_err(|e| self.runtime_error(*e))?;
+                    self.push(result);
                 }
                 Op::PrintString => {
                     let s_idx = self.read_u16() as usize;
@@ -1064,7 +1100,7 @@ impl Vm {
                         }
                         Value::FunctionReference(r) => r.to_compact_string(),
                         s @ Value::StructInstance(..) => s.to_compact_string(),
-                        l @ Value::List(_) => l.to_compact_string(),
+                        l @ Value::Array(_) => l.to_compact_string(),
                         Value::FormatSpecifiers(_) => unreachable!(),
                     };
 
@@ -1173,15 +1209,28 @@ impl Vm {
                     let value = fields.swap_remove(field_idx as usize);
                     self.stack.push(value);
                 }
-                Op::BuildList => {
-                    let length = self.read_u16();
-                    let mut list = NumbatList::with_capacity(length as usize);
+                Op::BuildArray => {
+                    let rank = self.read_u16() as usize;
+                    let dim0 = self.read_u16() as usize;
+                    let dim1 = self.read_u16() as usize;
 
-                    for _ in 0..length {
-                        list.push_front(self.pop());
+                    let shape = match rank {
+                        1 => vec![dim0],
+                        2 => vec![dim0, dim1],
+                        _ => unreachable!("typed arrays are limited to rank 1 or 2"),
+                    };
+                    let total_len: usize = shape.iter().product();
+                    let mut elements = Vec::with_capacity(total_len);
+
+                    for _ in 0..total_len {
+                        elements.push(self.pop());
                     }
+                    elements.reverse();
 
-                    self.stack.push(list.into());
+                    self.stack.push(Value::Array(
+                        ArrayValue::from_shape_elements(shape, elements)
+                            .expect("typed array literals must have a valid shape"),
+                    ));
                 }
             }
         }

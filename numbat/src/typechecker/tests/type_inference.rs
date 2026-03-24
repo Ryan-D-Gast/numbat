@@ -28,9 +28,9 @@ fn c() -> Type {
     Type::Dimension(type_c())
 }
 
-// List<A>
+// Array<A>
 fn list_a() -> Type {
-    Type::List(Box::new(a()))
+    Type::Array(Box::new(a()))
 }
 
 // Type variables S and T
@@ -42,9 +42,9 @@ fn t() -> Type {
     Type::TVar(TypeVariable::new("T"))
 }
 
-// List<T>
+// Array<T>
 fn list_t() -> Type {
-    Type::List(Box::new(t()))
+    Type::Array(Box::new(t()))
 }
 
 // Dimension type variable D and E
@@ -78,18 +78,31 @@ fn d_times_e() -> Type {
     Type::Dimension(d.multiply(&e))
 }
 
-// List<D>
+// Array<D>
 fn list_d() -> Type {
-    Type::List(Box::new(d_dtype()))
+    Type::Array(Box::new(d_dtype()))
 }
 
-fn generalize(t: Type, variables: &[Type], dvariables: &[Type]) -> TypeScheme {
+fn array(element: Type) -> Type {
+    Type::Array(Box::new(element))
+}
+
+fn generalize(
+    t: Type,
+    variables: &[Type],
+    dvariables: &[Type],
+    shape_variables: &[Type],
+) -> TypeScheme {
     let variables = variables
         .iter()
         .flat_map(|t| t.type_variables(false))
         .collect::<Vec<_>>();
 
-    let bounds: Bounds = dvariables.iter().map(|v| Bound::IsDim(v.clone())).collect();
+    let bounds: Bounds = dvariables
+        .iter()
+        .map(|v| Bound::IsDim(v.clone()))
+        .chain(shape_variables.iter().map(|v| Bound::IsShape(v.clone())))
+        .collect();
 
     let qt = QualifiedType::new(t, bounds);
 
@@ -98,10 +111,13 @@ fn generalize(t: Type, variables: &[Type], dvariables: &[Type]) -> TypeScheme {
 
 macro_rules! fn_type {
     (forall $($type_params:expr),* ; dim $($dtypes:expr),* ; $($param_types:expr),* => $return_type:expr) => {
-        generalize(Type::Fn(vec![$($param_types),*], Box::new($return_type)), &[$($type_params),*], &[$($dtypes),*])
+        generalize(Type::Fn(vec![$($param_types),*], Box::new($return_type)), &[$($type_params),*], &[$($dtypes),*], &[])
     };
     (forall $($type_params:expr),* ; $($param_types:expr),* => $return_type:expr) => {
-        generalize(Type::Fn(vec![$($param_types),*], Box::new($return_type)), &[$($type_params),*], &[])
+        generalize(Type::Fn(vec![$($param_types),*], Box::new($return_type)), &[$($type_params),*], &[], &[])
+    };
+    (forall $($type_params:expr),* ; dim $($dtypes:expr),* ; shape $($shapes:expr),* ; $($param_types:expr),* => $return_type:expr) => {
+        generalize(Type::Fn(vec![$($param_types),*], Box::new($return_type)), &[$($type_params),*], &[$($dtypes),*], &[$($shapes),*])
     };
     ($($param_types:expr),* => $return_type:expr) => {
         TypeScheme::make_quantified(Type::Fn(vec![$($param_types),*], Box::new($return_type)))
@@ -201,7 +217,7 @@ fn factorial() {
 }
 
 #[test]
-fn lists() {
+fn arrays() {
     assert_eq!(
         get_inferred_fn_type("fn f(x) = [x]"),
         fn_type!(forall t(); t() => list_t())
@@ -221,6 +237,33 @@ fn lists() {
     assert_eq!(
         get_inferred_fn_type("fn f(xs) = len(xs)"),
         fn_type!(forall d_type(); list_d() => scalar())
+    );
+}
+
+#[test]
+fn matrices() {
+    assert_eq!(
+        get_inferred_fn_type("fn f() = [1; 2]"),
+        TypeScheme::make_quantified(Type::Fn(vec![], Box::new(array(Type::scalar())),))
+    );
+    assert_eq!(
+        get_inferred_fn_type("fn f<D: Dim>(xs: Array<D>) = transpose(xs)"),
+        TypeScheme::quantified(
+            1,
+            QualifiedType::new(
+                Type::Fn(
+                    vec![array(Type::Dimension(DType::from_type_variable(
+                        TypeVariable::Quantified(0),
+                    )))],
+                    Box::new(array(Type::Dimension(DType::from_type_variable(
+                        TypeVariable::Quantified(0),
+                    )))),
+                ),
+                [Bound::IsDim(Type::TVar(TypeVariable::Quantified(0)))]
+                    .into_iter()
+                    .collect(),
+            ),
+        )
     );
 }
 

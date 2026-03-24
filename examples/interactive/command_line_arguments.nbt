@@ -10,7 +10,7 @@
 let first: Length = parse(head(tail(args())))
 print("First length passed to the script: {first}")
 
-# Get all command line arguments (after the script name) and parse them into a list of lengths:
+# Get all command line arguments (after the script name) and parse them into an array of lengths:
 
 fn parse_length(input) -> Length = parse(input)
 let parameters = map(parse_length, tail(args()))

@@ -115,7 +115,7 @@ which is equivalent to the definition above.
 Functions can also be generic over *all* types, not just dimension types. In this case,
 no type constraints are needed. For example:
 ```nbt
-fn second_element<A>(xs: List<A>) -> A =
+fn second_element<A>(xs: Array<A>) -> A =
   head(tail(xs))
 
 second_element([10 cm, 2 m, 3 inch]) # returns 2 m

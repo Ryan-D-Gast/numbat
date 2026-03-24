@@ -1,12 +1,12 @@
 use core::quantities
-use core::lists
+use core::arrays
 use plot::common
 
 struct LinePlot<X: Dim, Y: Dim> {
   x_label: String,
   y_label: String,
-  xs: List<X>,
-  ys: List<Y>,
+  xs: Array<X>,
+  ys: Array<Y>,
 }
 let _num_points_for_line_plot = 2000
 

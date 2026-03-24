@@ -34,7 +34,7 @@ impl DimensionRegistry {
                 if self
                     .introduced_type_parameters
                     .iter()
-                    .any(|(_, n, _)| n == name)
+                    .any(|(_, n, bound)| n == name && *bound != Some(TypeParameterBound::Shape))
                 {
                     Ok(BaseRepresentation::from_factor(BaseRepresentationFactor(
                         name.to_compact_string(),

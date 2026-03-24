@@ -772,7 +772,7 @@ fn generic_structs() {
 }
 
 #[test]
-fn lists() {
+fn arrays() {
     assert_successful_typecheck("[]");
     assert_successful_typecheck("[1]");
     assert_successful_typecheck("[1, 2]");
@@ -787,21 +787,45 @@ fn lists() {
 
     assert!(matches!(
         get_typecheck_error("[1, a]"),
-        TypeCheckError::IncompatibleTypesInList(..)
+        TypeCheckError::IncompatibleTypesInArray(..)
     ));
     assert!(matches!(
         get_typecheck_error("[[1 a], 2 a]"),
-        TypeCheckError::IncompatibleTypesInList(..)
+        TypeCheckError::IncompatibleTypesInArray(..)
     ));
     assert!(matches!(
         get_typecheck_error("[[1 a], [1 b]]"),
-        TypeCheckError::IncompatibleTypesInList(..)
+        TypeCheckError::IncompatibleTypesInArray(..)
     ));
 
     assert!(matches!(
         get_typecheck_error("fn f(x) = [[x], x]"),
         TypeCheckError::ConstraintSolverError(..)
     ));
+}
+
+#[test]
+fn matrices() {
+    assert_successful_typecheck("[1; 2]");
+    assert_successful_typecheck("[1, 2; 3, 4]");
+    assert_successful_typecheck("[1 a; 2 a]");
+    assert_successful_typecheck("fn f() -> Array<Scalar> = [1; 2]");
+    assert_successful_typecheck("transpose([1, 2; 3, 4])");
+    assert_successful_typecheck("fill(0, [2, 2])");
+    assert_successful_typecheck("zeros([2, 2])");
+    assert_successful_typecheck("ones([2, 2])");
+    assert_successful_typecheck("eye([3, 3])");
+    assert_successful_typecheck("identity([3, 3])");
+    assert_successful_typecheck("type Column2<D: Dim> = Array<D>");
+    assert_successful_typecheck("type Vector2<D: Dim> = Vector<D, 2>");
+
+    assert_successful_typecheck("transpose([])");
+    assert!(matches!(
+        get_typecheck_error("[1; 2, 3]"),
+        TypeCheckError::InconsistentMatrixRowLengths(..)
+    ));
+    assert_successful_typecheck("[true; false]");
+    assert_successful_typecheck("[[1]; [2]]");
 }
 
 #[test]

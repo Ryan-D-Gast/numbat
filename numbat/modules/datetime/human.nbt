@@ -1,5 +1,5 @@
 use core::functions
-use core::lists
+use core::arrays
 use core::strings
 use core::quantities
 use units::si
@@ -37,11 +37,11 @@ fn _human_unit(time: Time) -> String =
   else                              ""
   where time_unit = if (time == 0) then 0 s else unit_of(time)
 
-fn _round_mixed_in<D: Dim>(base: D, value: List<D>) -> List<D> =
+fn _round_mixed_in<D: Dim>(base: D, value: Array<D>) -> Array<D> =
   value |> sum |> round_in(base) |> _unit_list(units)
-    where units: List<D> = value |> filter(is_nonzero) |> map(unit_of)
+    where units: Array<D> = value |> filter(is_nonzero) |> map(unit_of)
 
-fn _human_time(base: Time, time_segments: List<Time>) -> String = 
+fn _human_time(base: Time, time_segments: Array<Time>) -> String = 
   time_segments |> _round_mixed_in(base) |> map(_human_unit) |> foldl(_human_join, "")
 
 fn _human_for_long_duration(human_days: String, human_years: String) -> String =

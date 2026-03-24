@@ -132,8 +132,8 @@ pub enum TokenKind {
     Bool,
     String,
     DateTime,
+    Array,
     CapitalFn, // 'Fn'
-    List,
 
     // Procedure calls
     ProcedurePrint,
@@ -506,8 +506,8 @@ impl Tokenizer {
             m.insert("Bool", TokenKind::Bool);
             m.insert("String", TokenKind::String);
             m.insert("DateTime", TokenKind::DateTime);
+            m.insert("Array", TokenKind::Array);
             m.insert("Fn", TokenKind::CapitalFn);
-            m.insert("List", TokenKind::List);
 
             // Keep this list in sync with keywords::KEYWORDS!
             m
@@ -1416,7 +1416,7 @@ fn test_field_access() {
 }
 
 #[test]
-fn test_lists() {
+fn test_arrays() {
     insta::assert_snapshot!(
         tokenize_reduced_pretty("[1, 2.3, 4]").unwrap(),
         @r###"

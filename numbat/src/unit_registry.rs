@@ -35,6 +35,12 @@ pub struct UnitRegistry {
     pub inner: Registry<UnitMetadata>,
 }
 
+impl Default for UnitRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UnitRegistry {
     pub fn new() -> Self {
         Self {
